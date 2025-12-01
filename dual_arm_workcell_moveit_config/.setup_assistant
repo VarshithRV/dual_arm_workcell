@@ -1,0 +1,25 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: dual_arm_workcell_description
+    relative_path: urdf/dual_arm_workcell.urdf
+  srdf:
+    relative_path: config/dual_arm_workcell.srdf
+  package_settings:
+    author_name: Varshith R V
+    author_email: varshith_vyasaraj@sutd.edu.sg
+    generated_timestamp: 1763459641
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity

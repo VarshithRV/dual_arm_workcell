@@ -1,0 +1,235 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="$(arg name)">
+   <!-- import main macro -->
+   <xacro:include filename="$(find ur_with_tool_description)/urdf/ur_macro.xacro"/>
+    
+   <!-- possible 'ur_type' values: ur3, ur5, ur10, ur3e, ur5e, ur7e, ur10e, ur12e, ur16e, ur8long, ur15, ur18, ur20, ur30 -->
+   <!-- the default value should raise an error in case this was called without defining the type -->
+   <!-- Simulation parameters -->
+   <xacro:arg name="name" default="dual_arm_workcell" /> 
+   <xacro:arg name="use_fake_hardware" default="false" />
+   <xacro:arg name="fake_sensor_commands" default="false" />
+   <xacro:arg name="sim_gazebo" default="false" />
+   <xacro:arg name="sim_ignition" default="false" />
+   <xacro:arg name="simulation_controllers" default="" />
+   <xacro:arg name="left_initial_positions_file" default="$(find dual_arm_workcell_description)/config/initial_positions.yaml"/>
+   <xacro:arg name="right_initial_positions_file" default="$(find dual_arm_workcell_description)/config/initial_positions.yaml"/>
+    
+   <!-- LEFT ROBOT parameters -->
+   <xacro:arg name="left_ur_type" default="ur16e"/>
+   <xacro:arg name="left_name" default="left_ur16e"/>
+   <xacro:arg name="left_tf_prefix" default="" />
+   <xacro:arg name="left_joint_limit_params" default="$(find dual_arm_workcell_description)/config/$(arg left_ur_type)/joint_limits.yaml"/>
+   <xacro:arg name="left_kinematics_params" default="$(find dual_arm_workcell_description)/config/$(arg left_ur_type)/default_kinematics.yaml"/>
+   <xacro:arg name="left_physical_params" default="$(find dual_arm_workcell_description)/config/$(arg left_ur_type)/physical_parameters.yaml"/>
+   <xacro:arg name="left_visual_params" default="$(find dual_arm_workcell_description)/config/$(arg left_ur_type)/visual_parameters.yaml"/>
+   <xacro:arg name="left_transmission_hw_interface" default=""/>
+   <xacro:arg name="left_safety_limits" default="false"/>
+   <xacro:arg name="left_safety_pos_margin" default="0.15"/>
+   <xacro:arg name="left_safety_k_position" default="20"/>
+   <!-- ros2_control related parameters -->
+   <xacro:arg name="left_headless_mode" default="false" />
+   <xacro:arg name="left_robot_ip" default="0.0.0.0" />
+   <xacro:arg name="left_script_filename" default=""/>
+   <xacro:arg name="left_output_recipe_filename" default=""/>
+   <xacro:arg name="left_input_recipe_filename" default=""/>
+   <xacro:arg name="left_reverse_ip" default="0.0.0.0"/>
+   <xacro:arg name="left_script_command_port" default="50004"/>
+   <xacro:arg name="left_reverse_port" default="50001"/>
+   <xacro:arg name="left_script_sender_port" default="50002"/>
+   <xacro:arg name="left_trajectory_port" default="50003"/>
+   <!--   tool communication related parameters-->
+   <xacro:arg name="left_use_tool_communication" default="false" />
+   <xacro:arg name="left_tool_voltage" default="0" />
+   <xacro:arg name="left_tool_parity" default="0" />
+   <xacro:arg name="left_tool_baud_rate" default="115200" />
+   <xacro:arg name="left_tool_stop_bits" default="1" />
+   <xacro:arg name="left_tool_rx_idle_chars" default="1.5" />
+   <xacro:arg name="left_tool_tx_idle_chars" default="3.5" />
+   <xacro:arg name="left_tool_device_name" default="/tmp/ttyUR" /> <!--there might be an issue here-->
+   <xacro:arg name="left_tool_tcp_port" default="54321" />
+
+   <!-- RIGHT ROBOT parameters -->
+   <xacro:arg name="right_ur_type" default="ur16e"/>
+   <xacro:arg name="right_name" default="right_ur16e"/>
+   <xacro:arg name="right_tf_prefix" default="" />
+   <xacro:arg name="right_joint_limit_params" default="$(find dual_arm_workcell_description)/config/$(arg right_ur_type)/joint_limits.yaml"/>
+   <xacro:arg name="right_kinematics_params" default="$(find dual_arm_workcell_description)/config/$(arg right_ur_type)/default_kinematics.yaml"/>
+   <xacro:arg name="right_physical_params" default="$(find dual_arm_workcell_description)/config/$(arg right_ur_type)/physical_parameters.yaml"/>
+   <xacro:arg name="right_visual_params" default="$(find dual_arm_workcell_description)/config/$(arg right_ur_type)/visual_parameters.yaml"/>
+   <xacro:arg name="right_transmission_hw_interface" default=""/>
+   <xacro:arg name="right_safety_limits" default="false"/>
+   <xacro:arg name="right_safety_pos_margin" default="0.15"/>
+   <xacro:arg name="right_safety_k_position" default="20"/>
+   <!-- ros2_control related parameters -->
+   <xacro:arg name="right_headless_mode" default="false" />
+   <xacro:arg name="right_robot_ip" default="0.0.0.0" />
+   <xacro:arg name="right_script_filename" default=""/>
+   <xacro:arg name="right_output_recipe_filename" default=""/>
+   <xacro:arg name="right_input_recipe_filename" default=""/>
+   <xacro:arg name="right_reverse_ip" default="0.0.0.0"/>
+   <xacro:arg name="right_script_command_port" default="60004"/>
+   <xacro:arg name="right_reverse_port" default="60001"/>
+   <xacro:arg name="right_script_sender_port" default="60002"/>
+   <xacro:arg name="right_trajectory_port" default="60003"/>
+   <!--   tool communication related parameters-->
+   <xacro:arg name="right_use_tool_communication" default="false" />
+   <xacro:arg name="right_tool_voltage" default="0" />
+   <xacro:arg name="right_tool_parity" default="0" />
+   <xacro:arg name="right_tool_baud_rate" default="115200" />
+   <xacro:arg name="right_tool_stop_bits" default="1" />
+   <xacro:arg name="right_tool_rx_idle_chars" default="1.5" />
+   <xacro:arg name="right_tool_tx_idle_chars" default="3.5" />
+   <xacro:arg name="right_tool_device_name" default="/tmp/ttyUR" /> <!--there might be an issue here-->
+   <xacro:arg name="right_tool_tcp_port" default="64321" />
+
+   <!-- initial position for simulations (Fake Hardware, Gazebo, Ignition) -->
+   <!-- optional properties, if you prefer the same pattern as the UR driver -->
+   <!-- convert to property to use substitution in function -->
+   <xacro:property name="is_sim_gazebo" value="$(arg sim_gazebo)"/>
+   <xacro:property name="is_sim_ignition" value="$(arg sim_ignition)"/>
+   <xacro:property name="left_initial_positions_file_prop" value="$(arg left_initial_positions_file)"/>
+   <xacro:property name="right_initial_positions_file_prop" value="$(arg right_initial_positions_file)"/>
+
+   <!-- ######## KINEMATIC CHAIN ######### -->
+   <!-- create link fixed to the "world" -->
+   <link name="world" />
+
+   <xacro:if value="${is_sim_gazebo or is_sim_ignition}">
+     <link name="ground_plane">
+       <visual>
+         <origin rpy="0 0 0" xyz="0 0 0"/>
+         <geometry>
+           <box size="5 5 0"/>
+         </geometry>
+         <material name="ground_white">
+           <color rgba="1 1 1 0.5"/>
+         </material>
+       </visual>
+       <collision>
+         <origin rpy="0 0 0" xyz="0 0 0"/>
+         <geometry>
+           <box size="5 5 0"/>
+         </geometry>
+       </collision>
+     </link>
+
+     <joint name="ground_plane_joint" type="fixed">
+       <origin xyz="0 0 -0.01" rpy="0 0 0"/>
+       <parent link="world"/>
+       <child link="ground_plane"/>
+     </joint>
+   </xacro:if>
+
+   <!-- left arm -->
+   <xacro:ur_robot
+     name="$(arg left_name)"
+     tf_prefix="$(arg left_tf_prefix)"
+     parent="world"
+     joint_limits_parameters_file="$(arg left_joint_limit_params)"
+     kinematics_parameters_file="$(arg left_kinematics_params)"
+     physical_parameters_file="$(arg left_physical_params)"
+     visual_parameters_file="$(arg left_visual_params)"
+     transmission_hw_interface="$(arg left_transmission_hw_interface)"
+     safety_limits="$(arg left_safety_limits)"
+     safety_pos_margin="$(arg left_safety_pos_margin)"
+     safety_k_position="$(arg left_safety_k_position)"
+     use_fake_hardware="$(arg use_fake_hardware)"
+     fake_sensor_commands="$(arg fake_sensor_commands)"
+     sim_gazebo="$(arg sim_gazebo)"
+     sim_ignition="$(arg sim_ignition)"
+     headless_mode="$(arg left_headless_mode)"
+     initial_positions="${xacro.load_yaml(left_initial_positions_file_prop)}"
+     use_tool_communication="$(arg left_use_tool_communication)"
+     tool_voltage="$(arg left_tool_voltage)"
+     tool_parity="$(arg left_tool_parity)"
+     tool_baud_rate="$(arg left_tool_baud_rate)"
+     tool_stop_bits="$(arg left_tool_stop_bits)"
+     tool_rx_idle_chars="$(arg left_tool_rx_idle_chars)"
+     tool_tx_idle_chars="$(arg left_tool_tx_idle_chars)"
+     tool_device_name="$(arg left_tool_device_name)"
+     tool_tcp_port="$(arg left_tool_tcp_port)"
+     tool0_x="0.0"
+     tool0_y="0.0"
+     tool0_z="0.189"
+     robot_ip="$(arg left_robot_ip)"
+     script_filename="$(arg left_script_filename)"
+     output_recipe_filename="$(arg left_output_recipe_filename)"
+     input_recipe_filename="$(arg left_input_recipe_filename)"
+     reverse_ip="$(arg left_reverse_ip)"
+     script_command_port="$(arg left_script_command_port)"
+     reverse_port="$(arg left_reverse_port)"
+     script_sender_port="$(arg left_script_sender_port)"
+     trajectory_port="$(arg left_trajectory_port)"
+     >
+     <origin xyz="-0.331 0.529 0.006" rpy="0.0 0.0 1.570796" />          <!-- position robot in the world -->
+   </xacro:ur_robot>
+
+   <!-- right arm -->
+   <xacro:ur_robot
+     name="$(arg right_name)"
+     tf_prefix="$(arg right_tf_prefix)"
+     parent="world"
+     joint_limits_parameters_file="$(arg right_joint_limit_params)"
+     kinematics_parameters_file="$(arg right_kinematics_params)"
+     physical_parameters_file="$(arg right_physical_params)"
+     visual_parameters_file="$(arg right_visual_params)"
+     transmission_hw_interface="$(arg right_transmission_hw_interface)"
+     safety_limits="$(arg right_safety_limits)"
+     safety_pos_margin="$(arg right_safety_pos_margin)"
+     safety_k_position="$(arg right_safety_k_position)"
+     use_fake_hardware="$(arg use_fake_hardware)"
+     fake_sensor_commands="$(arg fake_sensor_commands)"
+     sim_gazebo="$(arg sim_gazebo)"
+     sim_ignition="$(arg sim_ignition)"
+     headless_mode="$(arg right_headless_mode)"
+     initial_positions="${xacro.load_yaml(right_initial_positions_file_prop)}"
+     use_tool_communication="$(arg right_use_tool_communication)"
+     tool_voltage="$(arg right_tool_voltage)"
+     tool_parity="$(arg right_tool_parity)"
+     tool_baud_rate="$(arg right_tool_baud_rate)"
+     tool_stop_bits="$(arg right_tool_stop_bits)"
+     tool_rx_idle_chars="$(arg right_tool_rx_idle_chars)"
+     tool_tx_idle_chars="$(arg right_tool_tx_idle_chars)"
+     tool_device_name="$(arg right_tool_device_name)"
+     tool_tcp_port="$(arg right_tool_tcp_port)"
+     tool0_x="0.0"
+     tool0_y="0.0"
+     tool0_z="0.125"
+     robot_ip="$(arg right_robot_ip)"
+     script_filename="$(arg right_script_filename)"
+     output_recipe_filename="$(arg right_output_recipe_filename)"
+     input_recipe_filename="$(arg right_input_recipe_filename)"
+     reverse_ip="$(arg right_reverse_ip)"
+     script_command_port="$(arg right_script_command_port)"
+     reverse_port="$(arg right_reverse_port)"
+     script_sender_port="$(arg right_script_sender_port)"
+     trajectory_port="$(arg right_trajectory_port)"
+     >
+     <origin xyz="0.587 0.542 0.001" rpy="-0.00 0.0 1.570796" />          <!-- position robot in the world -->
+   </xacro:ur_robot>
+
+   <xacro:if value="$(arg sim_gazebo)">
+    <!-- Gazebo plugins -->
+    <gazebo reference="world">
+    </gazebo>
+    <gazebo>
+      <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+        <parameters>$(arg simulation_controllers)</parameters>
+      </plugin>
+    </gazebo>
+  </xacro:if>
+
+  <xacro:if value="$(arg sim_ignition)">
+    <!-- Gazebo plugins -->
+    <gazebo reference="world">
+    </gazebo>
+    <gazebo>
+      <plugin filename="libign_ros2_control-system.so" name="ign_ros2_control::IgnitionROS2ControlPlugin">
+        <parameters>$(arg simulation_controllers)</parameters>
+        <controller_manager_node_name>$controller_manager</controller_manager_node_name>
+      </plugin>
+    </gazebo>
+  </xacro:if>
+
+</robot>
