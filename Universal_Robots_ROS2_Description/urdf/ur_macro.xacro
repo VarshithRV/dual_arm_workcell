@@ -82,6 +82,9 @@
     tool_tx_idle_chars:=3.5
     tool_device_name:=/tmp/ttyUR
     tool_tcp_port:=54321
+    tool0_x:=0.0
+    tool0_y:=0.0
+    tool0_z:=0.0
     robot_ip:=0.0.0.0
     script_filename:=to_be_filled_by_ur_robot_driver
     output_recipe_filename:=to_be_filled_by_ur_robot_driver
@@ -462,7 +465,7 @@
     <link name="${tf_prefix}tool0"/>
     <joint name="${tf_prefix}flange-tool0" type="fixed">
       <!-- default toolframe - X+ left, Y+ up, Z+ front -->
-      <origin xyz="0 0 0" rpy="${pi/2.0} 0 ${pi/2.0}"/>
+      <origin xyz="${tool0_z} ${tool0_x} ${tool0_y}" rpy="${pi/2.0} 0 ${pi/2.0}"/>
       <parent link="${tf_prefix}flange"/>
       <child link="${tf_prefix}tool0"/>
     </joint>
