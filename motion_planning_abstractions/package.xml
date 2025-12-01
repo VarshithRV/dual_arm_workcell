@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>motion_planning_abstractions</name>
+  <version>0.0.0</version>
+  <description>TODO: Package description</description>
+  <maintainer email="vrv278@gmail.com">barracuda</maintainer>
+  <license>TODO: License declaration</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <exec_depend>ros2launch</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <depend>dual_arm_workcell_bringup</depend>
+  <depend>motion_planning_abstractions_msgs</depend>
+  <depend>moveit_ros_planning_interface</depend>
+  <depend>geometry_msgs</depend>
+  <depend>moveit_core</depend>
+  <depend>example_interfaces</depend>
+  <depend>ur_msgs</depend>
+  <depend>controller_manager_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>open_set_object_detection_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_geometry_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

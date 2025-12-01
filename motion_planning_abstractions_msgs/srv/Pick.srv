@@ -1,0 +1,5 @@
+geometry_msgs/Point object_position
+int32 index # start from 0, for first
+string prompt
+---
+bool result

@@ -1,0 +1,9 @@
+int16 id
+string label
+geometry_msgs/PoseStamped pose
+int16 x_min
+int16 x_max
+int16 y_min
+int16 y_max
+geometry_msgs/PoseStamped x_min_y_min
+geometry_msgs/PoseStamped x_max_y_max

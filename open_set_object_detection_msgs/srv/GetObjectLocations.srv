@@ -1,0 +1,4 @@
+std_msgs/String prompt
+bool is_local
+---
+open_set_object_detection_msgs/ObjectPositions result

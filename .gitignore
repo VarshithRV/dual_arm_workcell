@@ -1,3 +1,7 @@
 **/__pycache__/
 **/log/
 **/.vscode/
+**/weights/
+open_set_object_detection/scripts/assets/
+open_set_object_detection/scripts/groundingdino/
+open_set_object_detection/scripts/inference_images/
