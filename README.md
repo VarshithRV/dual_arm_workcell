@@ -19,7 +19,10 @@ The calibration of the system is done using the moveit_calibration package. The 
 ---
 ### Usage of open_set_object_detection
 
-This is the ros2 abstraction over GroundingDino object detection, the final executable is the script `./open_set_object_detection/script/get_object_locations.py`, note that this is setup in the workstation with the grounding dino python environment described in the dependencies part. The script is run in the python venv setup in the `~/venv-gdino` folder of the workstation. This **cannot be simulated**, for this to be used in another PC, the groundingdino folder generated while building the GroundingDino package must be copied into the foler `open_set_object_detection/scripts/` folder. Along with that make empty directories `open_set_object_detection/scripts/inference_images` and `open_set_object_detection/scripts/assets`. 
+This is the ros2 abstraction over GroundingDino object detection, the final executable is the script `./open_set_object_detection/script/get_object_locations.py`, note that this is setup in the workstation with the grounding dino python environment described in the dependencies part. The script is run in the python venv setup in the `~/venv-gdino` folder of the workstation. This **cannot be simulated**, for this to be used in another PC, the groundingdino folder generated while building the GroundingDino package must be copied into the foler `open_set_object_detection/scripts/` folder. Along with that make empty directories `open_set_object_detection/scripts/inference_images` and `open_set_object_detection/scripts/assets`. The node automatically subscribes to left and right camera image streams with the topics and namespaces in sync with the current bringup for the cameras.
 
 ---
+### Usage of motion_planning_abstractions
+
+This is the collection of general purpose motion planning abstraction nodes, each host one or more services(or actions) that perform a generic set of movements. Eg move to a configurable joint state, pick and place with cartesian motion, pick and place with ft feedback for touch etc. The launchfile `motion_planning_abstractions/launch/launch_servers.launch.py` is used to launch the configured nodes.
 
