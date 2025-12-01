@@ -18,6 +18,7 @@
 
   <exec_depend>dual_arm_workcell_driver</exec_depend>
   <exec_depend>dual_arm_workcell_moveit_config</exec_depend>
+  <exec_depend>realsense2_camera</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
