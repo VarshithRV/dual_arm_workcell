@@ -246,10 +246,12 @@ def launch_setup(context, *args, **kwargs):
     # Trajectory Execution Configuration
     controllers_yaml = load_yaml("dual_arm_workcell_moveit_config", "config/controllers.yaml")
     # the scaled_joint_trajectory_controller does not work on fake hardware
-    change_controllers = context.perform_substitution(use_sim_time)
-    if change_controllers == "true":
-        controllers_yaml["scaled_joint_trajectory_controller"]["default"] = False
-        controllers_yaml["joint_trajectory_controller"]["default"] = True
+    # change_controllers = context.perform_substitution(use_sim_time)
+    # if change_controllers == "true":
+    #     controllers_yaml["left_scaled_joint_trajectory_controller"]["default"] = False
+    #     controllers_yaml["left_joint_trajectory_controller"]["default"] = True
+    #     controllers_yaml["right_scaled_joint_trajectory_controller"]["default"] = False
+    #     controllers_yaml["right_joint_trajectory_controller"]["default"] = True
 
     moveit_controllers = {
         "moveit_simple_controller_manager": controllers_yaml,

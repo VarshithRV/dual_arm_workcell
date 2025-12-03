@@ -15,8 +15,11 @@
 #include <moveit_servo/status_codes.h>
 #include <moveit_servo/servo_parameters.h>
 #include <moveit_servo/make_shared_from_pool.h>
+#include <chrono>
 
 #include <thread>
+
+using namespace std::literals::chrono_literals;
 
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("left_pose_tracker");
 
@@ -81,7 +84,7 @@ int main(int argc, char** argv){
     planning_scene_monitor->startPublishingPlanningScene(planning_scene_monitor::PlanningSceneMonitor::UPDATE_SCENE);
 
     // wait for planning scene monitor to setup
-    if(!planning_scene_monitor->waitForCurrentRobotState(node->now(),5.0/*seconds*/)){
+    if(!planning_scene_monitor->waitForCurrentRobotState(node->get_clock()->now(),5.0)){
         RCLCPP_ERROR_STREAM(LOGGER,"Error waiting for current robot state in PlanningSceneMonitor.");
         exit(EXIT_FAILURE);
     }

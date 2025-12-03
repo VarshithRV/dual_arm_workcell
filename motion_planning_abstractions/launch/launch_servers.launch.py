@@ -208,11 +208,13 @@ def launch_setup(context, *args, **kwargs):
 
     # Trajectory Execution Configuration
     controllers_yaml = load_yaml("dual_arm_workcell_moveit_config", "config/controllers.yaml")
-    # the scaled_joint_trajectory_controller does not work on fake hardware
-    change_controllers = context.perform_substitution(use_sim_time)
-    if change_controllers == "true":
-        controllers_yaml["scaled_joint_trajectory_controller"]["default"] = False
-        controllers_yaml["joint_trajectory_controller"]["default"] = True
+
+    # change_controllers = context.perform_substitution(use_sim_time)
+    # if change_controllers == "true":
+    #     controllers_yaml["left_scaled_joint_trajectory_controller"]["default"] = False
+    #     controllers_yaml["left_joint_trajectory_controller"]["default"] = True
+    #     controllers_yaml["right_scaled_joint_trajectory_controller"]["default"] = False
+    #     controllers_yaml["right_joint_trajectory_controller"]["default"] = True
 
     moveit_controllers = {
         "moveit_simple_controller_manager": controllers_yaml,
@@ -224,7 +226,6 @@ def launch_setup(context, *args, **kwargs):
         "trajectory_execution.allowed_execution_duration_scaling": 1.2,
         "trajectory_execution.allowed_goal_duration_margin": 0.5,
         "trajectory_execution.allowed_start_tolerance": 0.01,
-        # Execution time monitoring can be incompatible with the scaled JTC
         "trajectory_execution.execution_duration_monitoring": False,
     }
 
@@ -280,7 +281,7 @@ def launch_setup(context, *args, **kwargs):
             trajectory_execution,
             moveit_controllers,
             planning_scene_monitor_parameters,
-            {"use_sim_time": use_sim_time},
+            {"use_sim_time": use_sim_time}, # setting use_sim_time = True screws up the planning scene monitor, but setting it up False just reads at time 0
             left_servo_params,
         ]
     )
@@ -315,7 +316,7 @@ def launch_setup(context, *args, **kwargs):
             "pin_out2":0,
             "arm_side":"right"
         },
-        {"use_sim_time":True},
+        {"use_sim_time":use_sim_time},
         ],
     )
 
@@ -352,7 +353,7 @@ def launch_setup(context, *args, **kwargs):
             "speed":0.13,
             "pretouch_distance":0.04,
         },
-        {"use_sim_time":True},
+        {"use_sim_time":use_sim_time},
         ],
     )
 
@@ -372,6 +373,7 @@ def launch_setup(context, *args, **kwargs):
                 "wrist_2": 1.45247220993042,
                 "wrist_3": 1.677489995956421,
             },
+            {"use_sim_time":use_sim_time},
         ],
     )
 
@@ -391,6 +393,7 @@ def launch_setup(context, *args, **kwargs):
                 "wrist_2": -1.3437789122210901,
                 "wrist_3": -1.0042908827411097,
             },
+            {"use_sim_time":use_sim_time},
         ],
     )
 
@@ -410,6 +413,7 @@ def launch_setup(context, *args, **kwargs):
                 "wrist_2": 1.9041476249694824,
                 "wrist_3": -1.182901684437887,
             },
+            {"use_sim_time":use_sim_time},
         ],
     )
     
@@ -429,11 +433,12 @@ def launch_setup(context, *args, **kwargs):
                 "wrist_2": -2.130192581807272,
                 "wrist_3": 0.8935091495513916,
             },
+            {"use_sim_time":use_sim_time},
         ],
     )
 
     nodes_to_start = [
-        left_pose_tracking_node,
+        # left_pose_tracking_node,
         rws_pick_and_place_server,
         suction_pick_and_place_server,
         left_preaction_server,

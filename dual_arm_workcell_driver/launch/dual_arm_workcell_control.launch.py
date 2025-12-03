@@ -803,14 +803,14 @@ def generate_launch_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             "left_initial_joint_controller",
-            default_value="scaled_joint_trajectory_controller",
+            default_value="left_scaled_joint_trajectory_controller",
             choices=[
-                "scaled_joint_trajectory_controller",
-                "joint_trajectory_controller",
-                "forward_velocity_controller",
-                "forward_position_controller",
-                "freedrive_mode_controller",
-                "passthrough_trajectory_controller",
+                "left_scaled_joint_trajectory_controller",
+                "left_joint_trajectory_controller",
+                "left_forward_velocity_controller",
+                "left_forward_position_controller",
+                "left_freedrive_mode_controller",
+                "left_passthrough_trajectory_controller",
             ],
             description="Initially loaded robot controller for the left robot.",
         )
@@ -1032,14 +1032,14 @@ def generate_launch_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             "right_initial_joint_controller",
-            default_value="scaled_joint_trajectory_controller",
+            default_value="right_scaled_joint_trajectory_controller",
             choices=[
-                "scaled_joint_trajectory_controller",
-                "joint_trajectory_controller",
-                "forward_velocity_controller",
-                "forward_position_controller",
-                "freedrive_mode_controller",
-                "passthrough_trajectory_controller",
+                "right_scaled_joint_trajectory_controller",
+                "right_joint_trajectory_controller",
+                "right_forward_velocity_controller",
+                "right_forward_position_controller",
+                "right_freedrive_mode_controller",
+                "right_passthrough_trajectory_controller",
             ],
             description="Initially loaded robot controller for the right robot.",
         )

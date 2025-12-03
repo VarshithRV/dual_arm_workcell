@@ -32,7 +32,10 @@ def launch_setup():
     dual_arm_workcell_moveit_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(dual_arm_workcell_moveit_pkg, 'launch', 'dual_arm_workcell_moveit.launch.py')
-        )
+        ),
+        launch_arguments={
+            'use_sim_time': "false",
+        }.items()
     )
 
     left_camera_launch = IncludeLaunchDescription(
