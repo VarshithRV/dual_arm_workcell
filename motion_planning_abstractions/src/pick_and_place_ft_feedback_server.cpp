@@ -26,6 +26,9 @@
 #include "std_srvs/srv/trigger.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
 
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+
 
 using namespace std::chrono_literals;
 using moveit::planning_interface::MoveGroupInterface;
@@ -34,86 +37,88 @@ using moveit::planning_interface::MoveGroupInterface;
 class PickPlace
 {
 public:
-    PickPlace(rclcpp::Node::SharedPtr &node)
+    PickPlace()
     {
-        node_ = node;
+        node_ = std::make_shared<rclcpp::Node>("pick_and_place_server");
 
         node_->declare_parameter<std::string>("planning_group", "right_ur16e");
-
         node_->declare_parameter<double>("place_x", 0.0);
         node_->declare_parameter<double>("place_y", 0.0);
         node_->declare_parameter<double>("place_z", 0.0);
-
         node_->declare_parameter<double>("orientation_w", 1.0);
         node_->declare_parameter<double>("orientation_x", 0.0);
         node_->declare_parameter<double>("orientation_y", 0.0);
         node_->declare_parameter<double>("orientation_z", 0.0);
-
         node_->declare_parameter<double>("pick_offset_x", 0.0);
         node_->declare_parameter<double>("pick_offset_y", 0.0);
         node_->declare_parameter<double>("pick_offset_z", 0.0);
-
         node_->declare_parameter<double>("look_offset_x", 0.0);
         node_->declare_parameter<double>("look_offset_y", 0.0);
         node_->declare_parameter<double>("look_offset_z", 0.0);
-
         node_->declare_parameter<double>("place_step_x", 0.05);
         node_->declare_parameter<double>("place_step_y", 0.05);
-        
         node_->declare_parameter<double>("pretouch_distance", 0.1);
         node_->declare_parameter<double>("speed", 0.05);
-
         node_->declare_parameter<int>("pin_out1", 0);
         node_->declare_parameter<int>("pin_out2", 0);
         node_->declare_parameter<std::string>("arm_side", "left");
-
         node_->declare_parameter<double>("height_of_movement", 0.25);
-
         node_->declare_parameter<std::string>("endeffector_link", "right_tool0");
-
         node_->declare_parameter<double>("ft_threshold", 0.25);
-
+        
         planning_group_ = node_->get_parameter("planning_group").as_string();
-
         orientation_.push_back(node_->get_parameter("orientation_w").as_double());
         orientation_.push_back(node_->get_parameter("orientation_x").as_double());
         orientation_.push_back(node_->get_parameter("orientation_y").as_double());
         orientation_.push_back(node_->get_parameter("orientation_z").as_double());
 
+        {
+            tf2::Quaternion q(
+                orientation_[1], 
+                orientation_[2], 
+                orientation_[3], 
+                orientation_[0]);
+            if (q.length2() > 1e-8)
+            {
+                q.normalize();
+            }
+            else
+            {
+                RCLCPP_WARN(node_->get_logger(),
+                            "Orientation parameter nearly zero, using identity quaternion");
+                q.setRPY(0.0, 0.0, 0.0);
+            }
+            param_orientation_ = tf2::toMsg(q);
+        }
+
         place_position_.push_back(node_->get_parameter("place_x").as_double());
         place_position_.push_back(node_->get_parameter("place_y").as_double());
         place_position_.push_back(node_->get_parameter("place_z").as_double());
-
         pick_offset_.push_back(node_->get_parameter("pick_offset_x").as_double());
         pick_offset_.push_back(node_->get_parameter("pick_offset_y").as_double());
         pick_offset_.push_back(node_->get_parameter("pick_offset_z").as_double());
-
         look_offset_.push_back(node_->get_parameter("look_offset_x").as_double());
         look_offset_.push_back(node_->get_parameter("look_offset_y").as_double());
         look_offset_.push_back(node_->get_parameter("look_offset_z").as_double());
-
         place_step_x_ = node_->get_parameter("place_step_x").as_double();
         place_step_y_ = node_->get_parameter("place_step_y").as_double();
-
         pretouch_distance_ = node_->get_parameter("pretouch_distance").as_double();
         speed_ = node_->get_parameter("speed").as_double();
-
         pin_out1_ = node_->get_parameter("pin_out1").as_int();
         pin_out2_ = node_->get_parameter("pin_out2").as_int();
-
-        ft_threshold_ = node->get_parameter("ft_threshold").as_double();
-
+        ft_threshold_ = node_->get_parameter("ft_threshold").as_double();
         arm_side = node_->get_parameter("arm_side").as_string();
-
         height_of_movement_ = node_->get_parameter("height_of_movement").as_double();
-
         endeffector_link_ = node_->get_parameter("endeffector_link").as_string();
-
         system_clock_ = rclcpp::Clock(RCL_SYSTEM_TIME);
 
-        // MoveIt interface
-        move_group_interface_ =
-            std::make_shared<MoveGroupInterface>(node_, planning_group_);
+        rclcpp::NodeOptions node_options;
+        node_options.automatically_declare_parameters_from_overrides(true);
+        node_options.use_global_arguments(false);
+        std::string moveit_node_name = std::string(node_->get_name()) + "_moveit";
+
+        moveit_node_ = std::make_shared<rclcpp::Node>(moveit_node_name, node_options);
+        move_group_interface_ = std::make_shared<MoveGroupInterface>(moveit_node_, planning_group_);
 
         move_group_interface_->setEndEffectorLink(endeffector_link_);
         move_group_interface_->setPlanningTime(10.0);
@@ -122,6 +127,11 @@ public:
         move_group_interface_->setMaxAccelerationScalingFactor(0.1);
         move_group_interface_->setPlannerId("RRTConnectkConfigDefault");
         move_group_interface_->startStateMonitor();
+
+        executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
+        executor_->add_node(node_);
+        moveit_executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+        moveit_executor_->add_node(moveit_node_);
 
         rclcpp::sleep_for(3s);
 
@@ -138,11 +148,9 @@ public:
                     current_pose.pose.position.y,
                     current_pose.pose.position.z);
 
-        // Reentrant callback group for services/clients
         callback_group_ = node_->create_callback_group(
             rclcpp::CallbackGroupType::Reentrant);
 
-        // Services using reentrant group
         print_state_server_ = node_->create_service<example_interfaces::srv::Trigger>(
             "~/print_robot_state",
             std::bind(&PickPlace::print_state, this,
@@ -158,32 +166,26 @@ public:
                 rmw_qos_profile_services_default,
                 callback_group_);
 
-        // IO client (can be default group)
         std::string io_service_name = arm_side + "_io_and_status_controller/set_io";
         set_io_client_ = node_->create_client<ur_msgs::srv::SetIO>(io_service_name);
 
-        // switch_controller client
-        switch_controller_client_ = node->create_client<controller_manager_msgs::srv::SwitchController>("controller_manager/switch_controller",
+        switch_controller_client_ = node_->create_client<controller_manager_msgs::srv::SwitchController>("controller_manager/switch_controller",
         rmw_qos_profile_services_default, callback_group_);
 
-        // zero ft sensor client
         std::string zero_ft_service_name = arm_side +"_io_and_status_controller/zero_ftsensor";
-        zeroft_client_ = node->create_client<std_srvs::srv::Trigger>(zero_ft_service_name,
+        zeroft_client_ = node_->create_client<std_srvs::srv::Trigger>(zero_ft_service_name,
         rmw_qos_profile_services_default, callback_group_);
 
-        // start servo client
         std::string start_servo_service_name = arm_side + "_servo_node_main/start_servo";
-        start_servo_client_ = node->create_client<std_srvs::srv::Trigger>(start_servo_service_name,
+        start_servo_client_ = node_->create_client<std_srvs::srv::Trigger>(start_servo_service_name,
         rmw_qos_profile_services_default,
         callback_group_);
 
-        // stop servo client
         std::string stop_servo_service_name = arm_side + "_servo_node_main/stop_servo";
-        stop_servo_client_ = node->create_client<std_srvs::srv::Trigger>(stop_servo_service_name,
+        stop_servo_client_ = node_->create_client<std_srvs::srv::Trigger>(stop_servo_service_name,
         rmw_qos_profile_services_default,
         callback_group_);
 
-        // Perception client using same reentrant group
         std::string get_object_locations_service_name = arm_side + "_get_object_locations";
         get_object_locations_client_ =
             node_->create_client<open_set_object_detection_msgs::srv::GetObjectLocations>(
@@ -191,13 +193,11 @@ public:
                 rmw_qos_profile_services_default,
                 callback_group_);
 
-        // subscriber to wrench
         std::string wrench_topic_name = arm_side + "_force_torque_sensor_broadcaster/wrench";
         wrench_subscription_ = node_->create_subscription<geometry_msgs::msg::WrenchStamped>(wrench_topic_name,10,std::bind(&PickPlace::wrench_callback,this,std::placeholders::_1));
 
-        // publisher to <prefix>_servo_node_main/delta_twist_cmds of TwistStamped type
         std::string delta_twist_cmd_topic = arm_side + "_servo_node_main/delta_twist_cmds";
-        delta_twist_cmd_publisher_ = node->create_publisher<geometry_msgs::msg::TwistStamped>(delta_twist_cmd_topic,10);
+        delta_twist_cmd_publisher_ = node_->create_publisher<geometry_msgs::msg::TwistStamped>(delta_twist_cmd_topic,10);
 
         if (!set_io_client_->wait_for_service(3s))
         {
@@ -208,7 +208,11 @@ public:
         {
             RCLCPP_ERROR(node_->get_logger(), "GetObjectLocations service is not connected!");
         }
+        
+        thread_ = std::thread([this](){moveit_executor_->spin();});
+        executor_->spin();
     }
+
 
     void gripper_on()
     {
@@ -258,7 +262,6 @@ public:
         }
     }
 
-    // switch controller
     bool switch_controller(){
         RCLCPP_INFO(node_->get_logger(),"Switching controller");
         auto request = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
@@ -311,7 +314,6 @@ public:
         }
     }
 
-    // function to start servo and stop servo
     bool start_servo(){
         RCLCPP_INFO(node_->get_logger(),"Starting servo service call");
         auto request = std::make_shared<std_srvs::srv::Trigger_Request>();
@@ -334,7 +336,6 @@ public:
         return future.get()->success;
     }
 
-    // function to zero_ft
     bool zeroft(){
         RCLCPP_INFO(node_->get_logger(),"Zeroing ft sensor");
         auto request = std::make_shared<std_srvs::srv::Trigger_Request>();
@@ -346,7 +347,6 @@ public:
         return future.get()->success;
     }
 
-    // ft feedback downward movement
     void touch_object(){
         // std::this_thread::sleep_for(1s);
         if(!this->switch_controller()){
@@ -441,17 +441,9 @@ public:
         move_group_interface_->setStartStateToCurrentState();
         auto current_pose = this->move_group_interface_->getCurrentPose().pose;
 
-        double orientation_norm = std::sqrt(
-            orientation_[0] * orientation_[0] +
-            orientation_[1] * orientation_[1] +
-            orientation_[2] * orientation_[2] +
-            orientation_[3] * orientation_[3]);
 
         approx_pick.position = request->object_position;
-        approx_pick.orientation.w = orientation_[0] / orientation_norm;
-        approx_pick.orientation.x = orientation_[1] / orientation_norm;
-        approx_pick.orientation.y = orientation_[2] / orientation_norm;
-        approx_pick.orientation.z = orientation_[3] / orientation_norm;
+        approx_pick.orientation = param_orientation_;
 
         geometry_msgs::msg::Pose place;
         // Grid pattern on place_x, place_y
@@ -459,10 +451,7 @@ public:
         bool index_even = ((request->index % 2) == 0);
         place.position.y = place_position_[1] - (index_even ? 0.0 : place_step_y_);
         place.position.z = place_position_[2];
-        place.orientation.w = orientation_[0]/ orientation_norm;
-        place.orientation.x = orientation_[1]/ orientation_norm;
-        place.orientation.y = orientation_[2]/ orientation_norm;
-        place.orientation.z = orientation_[3]/ orientation_norm;
+        place.orientation = param_orientation_;
 
         // Move to "look" pose first
         move_group_interface_->setStartStateToCurrentState();
@@ -522,10 +511,7 @@ public:
         pick.position.y += pick_offset_[1];
         pick.position.z += pick_offset_[2] + pretouch_distance_;
 
-        pick.orientation.w = orientation_[0] / orientation_norm;
-        pick.orientation.x = orientation_[1] / orientation_norm;
-        pick.orientation.y = orientation_[2] / orientation_norm;
-        pick.orientation.z = orientation_[3] / orientation_norm;
+        pick.orientation = param_orientation_;
 
         // Cartesian move to pick (xy first, then down)
         waypoints.clear();
@@ -642,8 +628,12 @@ public:
     }
 
 private:
+    std::thread thread_;
     std::shared_ptr<MoveGroupInterface> move_group_interface_;
     rclcpp::Node::SharedPtr node_;
+    rclcpp::Node::SharedPtr moveit_node_;
+    rclcpp::executors::MultiThreadedExecutor::SharedPtr executor_;
+    rclcpp::executors::SingleThreadedExecutor::SharedPtr moveit_executor_;
     rclcpp::CallbackGroup::SharedPtr callback_group_;
     rclcpp::Service<example_interfaces::srv::Trigger>::SharedPtr print_state_server_;
     rclcpp::Service<motion_planning_abstractions_msgs::srv::Pick>::SharedPtr pick_and_place_server_;
@@ -670,20 +660,14 @@ private:
     double ft_threshold_;
     double place_step_x_, place_step_y_;
     int pin_out1_, pin_out2_;
+    geometry_msgs::msg::Quaternion param_orientation_;
 };
 
 int main(int argc, char *argv[])
 {
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<rclcpp::Node>("pick_and_place_server");
-    auto moveit_example = std::make_shared<PickPlace>(node);
-    (void)moveit_example;
 
-    RCLCPP_INFO(node->get_logger(), "Started the pick_and_place_server node");
-
-    rclcpp::executors::MultiThreadedExecutor executor;
-    executor.add_node(node);
-    executor.spin();
+    auto moveit_example = PickPlace();
 
     rclcpp::shutdown();
     return 0;

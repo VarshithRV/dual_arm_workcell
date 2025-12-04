@@ -22,72 +22,64 @@ using moveit::planning_interface::MoveGroupInterface;
 
 class PickPlace{
     public: 
-        PickPlace(rclcpp::Node::SharedPtr &node){
-            node_ = node;
+        PickPlace(){
+
+            node_ = std::make_shared<rclcpp::Node>("pick_and_place_server");
             
             node_->declare_parameter<std::string>("planning_group", "right_ur16e");
-            
             node_->declare_parameter<double>("place_x", 0.0);
             node_->declare_parameter<double>("place_y", 0.0);
             node_->declare_parameter<double>("place_z", 0.0);
-            
             node_->declare_parameter<double>("orientation_w", 1.0);
             node_->declare_parameter<double>("orientation_x", 0.0);
             node_->declare_parameter<double>("orientation_y", 0.0);
             node_->declare_parameter<double>("orientation_z", 0.0);
-
             node_->declare_parameter<double>("pick_offset_x", 0.0);
             node_->declare_parameter<double>("pick_offset_y", 0.0);
             node_->declare_parameter<double>("pick_offset_z", 0.0);
-
             node_->declare_parameter<double>("look_offset_x", 0.0);
             node_->declare_parameter<double>("look_offset_y", 0.0);
             node_->declare_parameter<double>("look_offset_z", 0.0);
-
             node_->declare_parameter<double>("place_step_x", 0.05);
             node_->declare_parameter<double>("place_step_y", 0.05);
-
             node_->declare_parameter<int>("pin_out1", 0);
             node_->declare_parameter<int>("pin_out2", 0);
-            node->declare_parameter<std::string>("arm_side","left");
-            
+            node_->declare_parameter<std::string>("arm_side","left");
             node_->declare_parameter<double>("height_of_movement", 0.25);
-
             node_->declare_parameter<std::string>("endeffector_link", "right_tool0");
 
+
             planning_group_ = node_->get_parameter("planning_group").as_string();
-            
-            orientation_.push_back(node->get_parameter("orientation_w").as_double());
-            orientation_.push_back(node->get_parameter("orientation_x").as_double());
-            orientation_.push_back(node->get_parameter("orientation_y").as_double());
-            orientation_.push_back(node->get_parameter("orientation_z").as_double());
-
-            place_position_.push_back(node->get_parameter("place_x").as_double());
-            place_position_.push_back(node->get_parameter("place_y").as_double());
-            place_position_.push_back(node->get_parameter("place_z").as_double());
-
-            pick_offset_.push_back(node->get_parameter("pick_offset_x").as_double());
-            pick_offset_.push_back(node->get_parameter("pick_offset_y").as_double());
-            pick_offset_.push_back(node->get_parameter("pick_offset_z").as_double());
-
-            look_offset_.push_back(node->get_parameter("look_offset_x").as_double());
-            look_offset_.push_back(node->get_parameter("look_offset_y").as_double());
-            look_offset_.push_back(node->get_parameter("look_offset_z").as_double());
-
+            orientation_.push_back(node_->get_parameter("orientation_w").as_double());
+            orientation_.push_back(node_->get_parameter("orientation_x").as_double());
+            orientation_.push_back(node_->get_parameter("orientation_y").as_double());
+            orientation_.push_back(node_->get_parameter("orientation_z").as_double());
+            place_position_.push_back(node_->get_parameter("place_x").as_double());
+            place_position_.push_back(node_->get_parameter("place_y").as_double());
+            place_position_.push_back(node_->get_parameter("place_z").as_double());
+            pick_offset_.push_back(node_->get_parameter("pick_offset_x").as_double());
+            pick_offset_.push_back(node_->get_parameter("pick_offset_y").as_double());
+            pick_offset_.push_back(node_->get_parameter("pick_offset_z").as_double());
+            look_offset_.push_back(node_->get_parameter("look_offset_x").as_double());
+            look_offset_.push_back(node_->get_parameter("look_offset_y").as_double());
+            look_offset_.push_back(node_->get_parameter("look_offset_z").as_double());
             place_step_x_ = node_->get_parameter("place_step_x").as_double();
             place_step_y_ = node_->get_parameter("place_step_y").as_double();
+            pin_out1_ = node_->get_parameter("pin_out1").as_int();
+            pin_out2_ = node_->get_parameter("pin_out2").as_int();
+            std::string arm_side_ = node_->get_parameter("arm_side").as_string();
+            height_of_movement_=node_->get_parameter("height_of_movement").as_double();
+            endeffector_link_=node_->get_parameter("endeffector_link").as_string();
 
-            pin_out1_ = node->get_parameter("pin_out1").as_int();
-            pin_out2_ = node->get_parameter("pin_out2").as_int();
+            auto node_options = rclcpp::NodeOptions();
+            node_options.automatically_declare_parameters_from_overrides(true);
+            node_options.use_global_arguments(false);
+            std::string moveit_node_name = std::string(node_->get_name()) + "_moveit";
 
-            std::string arm_side_ = node->get_parameter("arm_side").as_string();
+            moveit_node_ = std::make_shared<rclcpp::Node>(moveit_node_name, node_options);
 
-            height_of_movement_=node->get_parameter("height_of_movement").as_double();
-
-            endeffector_link_=node->get_parameter("endeffector_link").as_string();
-
-            move_group_interface_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node, planning_group_);
-
+            move_group_interface_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(moveit_node_, planning_group_);
+            
             move_group_interface_->setEndEffectorLink(endeffector_link_);
             move_group_interface_->setPlanningTime(10.0);
             move_group_interface_->setNumPlanningAttempts(15);
@@ -96,16 +88,21 @@ class PickPlace{
             move_group_interface_->setPlannerId("RRTConnectkConfigDefault");
             move_group_interface_->startStateMonitor();
 
+            executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
+            executor_->add_node(node_);
+            moveit_executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+            moveit_executor_->add_node(moveit_node_);
+            
             rclcpp::sleep_for(3s);
 
             auto planning_frame = this->move_group_interface_->getPlanningFrame();
-            RCLCPP_INFO(node->get_logger(),"Planning frame : %s",planning_frame.c_str());
+            RCLCPP_INFO(node_->get_logger(),"Planning frame : %s",planning_frame.c_str());
             
             auto endeffector = this-> move_group_interface_->getEndEffectorLink();
-            RCLCPP_INFO(node->get_logger(),"End Effector Link : %s",endeffector.c_str());
+            RCLCPP_INFO(node_->get_logger(),"End Effector Link : %s",endeffector.c_str());
             
             auto current_pose = this->move_group_interface_->getCurrentPose(endeffector); // this consistently returns a wrong value dont know why, some executor shit
-            RCLCPP_INFO(node->get_logger(), "x : %f, y : %f, z : %f",current_pose.pose.position.x,current_pose.pose.position.y,current_pose.pose.position.z);
+            RCLCPP_INFO(node_->get_logger(), "x : %f, y : %f, z : %f",current_pose.pose.position.x,current_pose.pose.position.y,current_pose.pose.position.z);
 
             print_state_server_= node_->create_service<example_interfaces::srv::Trigger>("~/print_robot_state",std::bind(&PickPlace::print_state,this,std::placeholders::_1,std::placeholders::_2));
             pick_and_place_server_ = node_->create_service<motion_planning_abstractions_msgs::srv::Pick>("~/pick_and_place",std::bind(&PickPlace::pick_and_place_server,this,std::placeholders::_1,std::placeholders::_2));
@@ -114,6 +111,9 @@ class PickPlace{
 
             if(!set_io_client_->wait_for_service(3s))
                 RCLCPP_ERROR(node_->get_logger(),"Set IO client service is not connected!");
+
+            thread_ = std::thread([this](){moveit_executor_->spin();});
+            executor_->spin();
 
         }
 
@@ -322,6 +322,10 @@ class PickPlace{
     private:
         std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_interface_;
         rclcpp::Node::SharedPtr node_;
+        rclcpp::Executor::SharedPtr executor_;
+        rclcpp::Node::SharedPtr moveit_node_;
+        rclcpp::Executor::SharedPtr moveit_executor_;
+        std::thread thread_;
         rclcpp::Service<example_interfaces::srv::Trigger>::SharedPtr print_state_server_;
         rclcpp::Service<motion_planning_abstractions_msgs::srv::Pick>::SharedPtr pick_and_place_server_;
         rclcpp::Client<ur_msgs::srv::SetIO>::SharedPtr set_io_client_;
@@ -339,9 +343,5 @@ class PickPlace{
 int main(int argc, char* argv[]){
 
     rclcpp::init(argc,argv);
-    auto node = std::make_shared<rclcpp::Node>("pick_and_place_server");
-    auto moveit_example = std::make_shared<PickPlace>(node);
-    RCLCPP_INFO(node->get_logger(),"Started the tutorials node");
-    rclcpp::spin(node);
-    rclcpp::shutdown();
+    auto moveit_example = PickPlace();
 }

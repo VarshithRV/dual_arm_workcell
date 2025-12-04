@@ -18,8 +18,8 @@ using moveit::planning_interface::MoveGroupInterface;
 
 class PredefinedStateServer{
     public: 
-        PredefinedStateServer(rclcpp::Node::SharedPtr &node){
-            node_ = node;
+        PredefinedStateServer(){
+            node_ = std::make_shared<rclcpp::Node>("predefined_state_server");
             
             node_->declare_parameter<std::string>("planning_group", "left_ur16e");
             node_->declare_parameter<double>("shoulder_pan", 0.0);
@@ -28,7 +28,7 @@ class PredefinedStateServer{
             node_->declare_parameter<double>("wrist_1", 0.0);
             node_->declare_parameter<double>("wrist_2", 0.0);
             node_->declare_parameter<double>("wrist_3", 0.0);
-
+            
             planning_group_ = node_->get_parameter("planning_group").as_string();
             joint_targets_.push_back(node_->get_parameter("shoulder_pan").as_double());
             joint_targets_.push_back(node_->get_parameter("shoulder_lift").as_double());
@@ -36,44 +36,30 @@ class PredefinedStateServer{
             joint_targets_.push_back(node_->get_parameter("wrist_1").as_double());
             joint_targets_.push_back(node_->get_parameter("wrist_2").as_double());
             joint_targets_.push_back(node_->get_parameter("wrist_3").as_double());
-
-            // --- Create a dedicated node for MoveIt ---
+            
+            
             rclcpp::NodeOptions opts;
             opts.automatically_declare_parameters_from_overrides(true);
-            moveit_node_ = std::make_shared<rclcpp::Node>("predefined_state_moveit_node", opts);
+            opts.use_global_arguments(false);
+            std::string moveit_node_name = std::string(node_->get_name()) + "_moveit";
+            moveit_node_ = std::make_shared<rclcpp::Node>(moveit_node_name, opts);
 
-            move_group_interface_ =
-              std::make_shared<MoveGroupInterface>(moveit_node_, planning_group_);
-
-            // Start state monitor
+            move_group_interface_ = std::make_shared<MoveGroupInterface>(moveit_node_, planning_group_);
+            
             move_group_interface_->startStateMonitor();
-
-            // Spin MoveIt node in its own executor thread
-            moveit_executor_ =
-              std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+            
+            executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
+            executor_->add_node(node_);
+            moveit_executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
             moveit_executor_->add_node(moveit_node_);
-            moveit_thread_ = std::thread([this]() {
-                moveit_executor_->spin();
-            });
 
-            // Services on app node
-            print_state_server_ = node_->create_service<example_interfaces::srv::Trigger>(
-                "~/print_robot_state",
-                std::bind(&PredefinedStateServer::print_state, this, std::placeholders::_1, std::placeholders::_2));
-
-            move_to_state_server_ = node_->create_service<example_interfaces::srv::Trigger>(
-                "~/move_to_state",
-                std::bind(&PredefinedStateServer::move_to_joint_state, this, std::placeholders::_1, std::placeholders::_2));
-        }
-
-        ~PredefinedStateServer()
-        {
-            if (moveit_executor_) {
-                moveit_executor_->cancel();
-            }
-            if (moveit_thread_.joinable()) {
-                moveit_thread_.join();
-            }
+            print_state_server_ = node_->create_service<example_interfaces::srv::Trigger>("~/print_robot_state",std::bind(&PredefinedStateServer::print_state, this, std::placeholders::_1, std::placeholders::_2));
+            move_to_state_server_ = node_->create_service<example_interfaces::srv::Trigger>("~/move_to_state",std::bind(&PredefinedStateServer::move_to_joint_state, this, std::placeholders::_1, std::placeholders::_2));
+            
+            RCLCPP_INFO(node_->get_logger(),"Started the tutorials node");
+            
+            thread_ = std::thread([this](){moveit_executor_->spin();});
+            executor_->spin();
         }
 
         // pose setpoint movement
@@ -93,7 +79,7 @@ class PredefinedStateServer{
 
         // joint state setpoint movement
         void move_to_joint_state(const example_interfaces::srv::Trigger_Request::SharedPtr request, example_interfaces::srv::Trigger_Response::SharedPtr response){
-            std::vector<double> group_variable_values = {joint_targets_};
+            std::vector<double> group_variable_values = joint_targets_;
             move_group_interface_->setStartStateToCurrentState();
             move_group_interface_->setJointValueTarget(group_variable_values);
             auto const [success, plan] = [this]{
@@ -141,10 +127,11 @@ class PredefinedStateServer{
 
     private:
         std::shared_ptr<MoveGroupInterface> move_group_interface_;
-        rclcpp::Node::SharedPtr node_;         // app node
-        rclcpp::Node::SharedPtr moveit_node_;  // dedicated MoveIt node
+        rclcpp::Node::SharedPtr node_;
+        rclcpp::Executor::SharedPtr executor_;
+        rclcpp::Node::SharedPtr moveit_node_;
         rclcpp::Executor::SharedPtr moveit_executor_;
-        std::thread moveit_thread_;
+        std::thread thread_;
 
         rclcpp::Service<example_interfaces::srv::Trigger>::SharedPtr print_state_server_;
         rclcpp::Service<example_interfaces::srv::Trigger>::SharedPtr move_to_state_server_;
@@ -155,12 +142,5 @@ class PredefinedStateServer{
 int main(int argc, char* argv[]){
 
     rclcpp::init(argc,argv);
-    auto node = std::make_shared<rclcpp::Node>("predefined_state_server");
-    auto executor = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
-    auto moveit_example = std::make_shared<PredefinedStateServer>(node);
-    auto moveit_example = PredefinedStateServer(node);
-    RCLCPP_INFO(node->get_logger(),"Started the tutorials node");
-    executor->add_node(node);
-    executor->spin();
-    rclcpp::shutdown();
+    auto moveit_example = PredefinedStateServer();
 }
