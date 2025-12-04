@@ -121,8 +121,11 @@ int main(int argc, char* argv[]){
 
     rclcpp::init(argc,argv);
     auto node = std::make_shared<rclcpp::Node>("predefined_state_server");
-    auto moveit_example = std::make_shared<PredefinedStateServer>(node);
+    auto executor = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
+    // auto moveit_example = std::make_shared<PredefinedStateServer>(node);
+    auto moveit_example = PredefinedStateServer(node);
     RCLCPP_INFO(node->get_logger(),"Started the tutorials node");
-    rclcpp::spin(node);
+    executor->add_node(node);
+    executor->spin();
     rclcpp::shutdown();
 }

@@ -12,6 +12,7 @@ def launch_setup():
     left_robot_ip = LaunchConfiguration('left_robot_ip')
     right_robot_ip = LaunchConfiguration('right_robot_ip')
     use_fake_hardware = LaunchConfiguration('use_fake_hardware')
+    use_sim_time = LaunchConfiguration('use_sim_time')
     
     dual_arm_workcell_driver_pkg = FindPackageShare('dual_arm_workcell_driver').find('dual_arm_workcell_driver')
     dual_arm_workcell_moveit_pkg = FindPackageShare('dual_arm_workcell_moveit_config').find('dual_arm_workcell_moveit_config')
@@ -26,6 +27,7 @@ def launch_setup():
             'left_robot_ip': left_robot_ip,
             'right_robot_ip': right_robot_ip,
             'use_fake_hardware': use_fake_hardware,
+            'use_sim_time': use_sim_time,
         }.items()
     )
 
@@ -34,7 +36,7 @@ def launch_setup():
             os.path.join(dual_arm_workcell_moveit_pkg, 'launch', 'dual_arm_workcell_moveit.launch.py')
         ),
         launch_arguments={
-            'use_sim_time': "false",
+            'use_sim_time': use_sim_time,
         }.items()
     )
 
@@ -118,6 +120,14 @@ def generate_launch_description():
             name="use_fake_hardware",
             default_value="false",
             description="Use fake hardware?",
+        )
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            name="use_sim_time",
+            default_value="false",
+            description="Use sim time?",
         )
     )
 
