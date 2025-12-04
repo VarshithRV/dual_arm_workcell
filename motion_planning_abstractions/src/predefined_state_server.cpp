@@ -37,12 +37,43 @@ class PredefinedStateServer{
             joint_targets_.push_back(node_->get_parameter("wrist_2").as_double());
             joint_targets_.push_back(node_->get_parameter("wrist_3").as_double());
 
-            move_group_interface_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node, planning_group_);
-            bool ok = move_group_interface_->startStateMonitor(5.0);
-            if (!ok)
-                RCLCPP_WARN(node_->get_logger(), "State monitor did not receive joint states within 5 seconds");
-            print_state_server_= node_->create_service<example_interfaces::srv::Trigger>("~/print_robot_state",std::bind(&PredefinedStateServer::print_state,this,std::placeholders::_1,std::placeholders::_2));
-            move_to_state_server_ = node->create_service<example_interfaces::srv::Trigger>("~/move_to_state",std::bind(&PredefinedStateServer::move_to_joint_state,this,std::placeholders::_1,std::placeholders::_2));
+            // --- Create a dedicated node for MoveIt ---
+            rclcpp::NodeOptions opts;
+            opts.automatically_declare_parameters_from_overrides(true);
+            moveit_node_ = std::make_shared<rclcpp::Node>("predefined_state_moveit_node", opts);
+
+            move_group_interface_ =
+              std::make_shared<MoveGroupInterface>(moveit_node_, planning_group_);
+
+            // Start state monitor
+            move_group_interface_->startStateMonitor();
+
+            // Spin MoveIt node in its own executor thread
+            moveit_executor_ =
+              std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+            moveit_executor_->add_node(moveit_node_);
+            moveit_thread_ = std::thread([this]() {
+                moveit_executor_->spin();
+            });
+
+            // Services on app node
+            print_state_server_ = node_->create_service<example_interfaces::srv::Trigger>(
+                "~/print_robot_state",
+                std::bind(&PredefinedStateServer::print_state, this, std::placeholders::_1, std::placeholders::_2));
+
+            move_to_state_server_ = node_->create_service<example_interfaces::srv::Trigger>(
+                "~/move_to_state",
+                std::bind(&PredefinedStateServer::move_to_joint_state, this, std::placeholders::_1, std::placeholders::_2));
+        }
+
+        ~PredefinedStateServer()
+        {
+            if (moveit_executor_) {
+                moveit_executor_->cancel();
+            }
+            if (moveit_thread_.joinable()) {
+                moveit_thread_.join();
+            }
         }
 
         // pose setpoint movement
@@ -109,8 +140,12 @@ class PredefinedStateServer{
         }
 
     private:
-        std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_interface_;
-        rclcpp::Node::SharedPtr node_;
+        std::shared_ptr<MoveGroupInterface> move_group_interface_;
+        rclcpp::Node::SharedPtr node_;         // app node
+        rclcpp::Node::SharedPtr moveit_node_;  // dedicated MoveIt node
+        rclcpp::Executor::SharedPtr moveit_executor_;
+        std::thread moveit_thread_;
+
         rclcpp::Service<example_interfaces::srv::Trigger>::SharedPtr print_state_server_;
         rclcpp::Service<example_interfaces::srv::Trigger>::SharedPtr move_to_state_server_;
         std::string planning_group_;
@@ -122,7 +157,7 @@ int main(int argc, char* argv[]){
     rclcpp::init(argc,argv);
     auto node = std::make_shared<rclcpp::Node>("predefined_state_server");
     auto executor = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
-    // auto moveit_example = std::make_shared<PredefinedStateServer>(node);
+    auto moveit_example = std::make_shared<PredefinedStateServer>(node);
     auto moveit_example = PredefinedStateServer(node);
     RCLCPP_INFO(node->get_logger(),"Started the tutorials node");
     executor->add_node(node);
