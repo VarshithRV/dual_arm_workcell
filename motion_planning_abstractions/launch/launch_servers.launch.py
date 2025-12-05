@@ -258,7 +258,8 @@ def launch_setup(context, *args, **kwargs):
 
     rws_pick_and_place_server = Node(
     package="motion_planning_abstractions",
-    executable="pick_and_place_local_perception_server",
+    # executable="pick_and_place_local_perception_server",
+    executable="pick_and_place_server",
     name="rws_pick_and_place_server",
     output="screen",
     parameters=[
@@ -415,12 +416,12 @@ def launch_setup(context, *args, **kwargs):
 
     nodes_to_start = [
         # left_pose_tracking_node,
-        # rws_pick_and_place_server,
-        # suction_pick_and_place_server,
+        rws_pick_and_place_server,
+        suction_pick_and_place_server,
         left_preaction_server,
-        # right_preaction_server,
-        # left_rest_server,
-        # right_rest_server,
+        right_preaction_server,
+        left_rest_server,
+        right_rest_server,
     ]
     
     return nodes_to_start

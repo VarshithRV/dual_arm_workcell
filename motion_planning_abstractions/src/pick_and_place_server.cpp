@@ -16,6 +16,9 @@
 #include "motion_planning_abstractions_msgs/srv/pick.hpp"
 #include "ur_msgs/srv/set_io.hpp"
 
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+
 using namespace std::chrono_literals;
 using moveit::planning_interface::MoveGroupInterface;
 
@@ -48,7 +51,6 @@ class PickPlace{
             node_->declare_parameter<double>("height_of_movement", 0.25);
             node_->declare_parameter<std::string>("endeffector_link", "right_tool0");
 
-
             planning_group_ = node_->get_parameter("planning_group").as_string();
             orientation_.push_back(node_->get_parameter("orientation_w").as_double());
             orientation_.push_back(node_->get_parameter("orientation_x").as_double());
@@ -70,6 +72,25 @@ class PickPlace{
             std::string arm_side_ = node_->get_parameter("arm_side").as_string();
             height_of_movement_=node_->get_parameter("height_of_movement").as_double();
             endeffector_link_=node_->get_parameter("endeffector_link").as_string();
+
+            {
+            tf2::Quaternion q(
+                orientation_[1], 
+                orientation_[2], 
+                orientation_[3], 
+                orientation_[0]);
+            if (q.length2() > 1e-8)
+            {
+                q.normalize();
+            }
+            else
+            {
+                RCLCPP_WARN(node_->get_logger(),
+                            "Orientation parameter nearly zero, using identity quaternion");
+                q.setRPY(0.0, 0.0, 0.0);
+            }
+            param_orientation_ = tf2::toMsg(q);
+        }
 
             auto node_options = rclcpp::NodeOptions();
             node_options.automatically_declare_parameters_from_overrides(true);
@@ -206,19 +227,13 @@ class PickPlace{
             auto current_pose = this->move_group_interface_->getCurrentPose().pose;
             
             approx_pick.position = request->object_position;
-            approx_pick.orientation.w = orientation_[0];
-            approx_pick.orientation.x = orientation_[1];
-            approx_pick.orientation.y = orientation_[2];
-            approx_pick.orientation.z = orientation_[3];
+            approx_pick.orientation = param_orientation_;
 
             geometry_msgs::msg::Pose place;
             place.position.x = place_position_[0] + (((request->index)/2)*place_step_x_); // for placing in a grid pattern
             place.position.y = place_position_[1] - ((request->index)%2?:place_step_y_,0.0);
             place.position.z = place_position_[2];
-            place.orientation.w = orientation_[0];
-            place.orientation.x = orientation_[1];
-            place.orientation.y = orientation_[2];
-            place.orientation.z = orientation_[3];
+            place.orientation = param_orientation_;
 
             move_group_interface_->setStartStateToCurrentState();
             geometry_msgs::msg::Pose target = move_group_interface_->getCurrentPose(this->endeffector_link_).pose;
@@ -338,6 +353,7 @@ class PickPlace{
         std::string endeffector_link_;
         double place_step_x_, place_step_y_;
         int pin_out1_, pin_out2_;
+        geometry_msgs::msg::Quaternion param_orientation_;
 };
 
 int main(int argc, char* argv[]){
