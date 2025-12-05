@@ -258,8 +258,7 @@ def launch_setup(context, *args, **kwargs):
 
     rws_pick_and_place_server = Node(
     package="motion_planning_abstractions",
-    # executable="pick_and_place_local_perception_server",
-    executable="pick_and_place_server",
+    executable="pick_and_place_local_perception_server",
     name="rws_pick_and_place_server",
     output="screen",
     parameters=[
