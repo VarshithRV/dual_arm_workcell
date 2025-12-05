@@ -16,6 +16,7 @@ from ament_index_python.packages import get_package_share_directory
 from moveit_configs_utils import MoveItConfigsBuilder
 from ur_moveit_config.launch_common import load_yaml
 from launch_param_builder import ParameterBuilder
+from moveit_configs_utils import MoveItConfigsBuilder
 
 import os
 import yaml
@@ -25,6 +26,12 @@ import xacro
 def launch_setup(context, *args, **kwargs):
     use_sim_time = LaunchConfiguration("use_sim_time")
     
+    moveit_config = (
+        MoveItConfigsBuilder("moveit_resources_panda")
+        .robot_description(file_path="config/panda.urdf.xacro")
+        .to_moveit_configs()
+    )
+
     robot_description_kinematics = {
     "robot_description_kinematics": {
         "ur_manipulator": {
@@ -34,13 +41,6 @@ def launch_setup(context, *args, **kwargs):
             "kinematics_solver_timeout": 0.005,
         },
     }}
-
-    # servo_params = {
-    #     "servo_node_main": ParameterBuilder("motion_planning_abstractions")
-    #     .yaml("config/pose_tracker.yaml")
-    #     .yaml("config/ur_servo.yaml")
-    #     .to_dict()
-    # }
 
     # left_pose_tracking_node = Node(
     #     package="motion_planning_abstractions",
@@ -53,6 +53,13 @@ def launch_setup(context, *args, **kwargs):
     #         left_servo_params,
     #     ]
     # )
+
+    servo_params = {
+        "servo_node": ParameterBuilder("motion_planning_abstractions")
+        .yaml("config/pose_tracker.yaml")
+        .yaml("config/ur_servo.yaml")
+        .to_dict()
+    }
 
     preaction_server = Node(
         package="motion_planning_abstractions",
@@ -93,11 +100,24 @@ def launch_setup(context, *args, **kwargs):
             {"use_sim_time":use_sim_time},
         ],
     )
+
+    pose_tracking_node = Node(
+        package="motion_planning_abstractions",
+        executable="pose_tracker",
+        output="screen",
+        parameters=[
+            
+            robot_description_kinematics,
+            {"use_sim_time": use_sim_time}, # setting use_sim_time = True screws up the planning scene monitor, but setting it up False just reads at time 0
+            servo_params,
+        ]
+    )
     
     nodes_to_start = [
         # left_pose_tracking_node,
-        preaction_server,
-        rest_server,
+        pose_tracking_node,
+        # preaction_server,
+        # rest_server,
     ]
     
     return nodes_to_start
@@ -115,6 +135,4 @@ def generate_launch_description():
         )
     )
 
-    return LaunchDescription(declared_arguments + 
-                             [OpaqueFunction(function=launch_setup)]
-    )
+    return LaunchDescription(declared_arguments + [OpaqueFunction(function=launch_setup)])

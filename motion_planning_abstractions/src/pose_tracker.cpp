@@ -54,7 +54,7 @@ int main(int argc, char** argv){
     executor.add_node(node);
     std::thread executor_thread([&executor](){executor.spin();});
 
-    auto servo_parameters = moveit_servo::ServoParameters::makeServoParameters(node,"left_servo_node_main"); //ungeneralized
+    auto servo_parameters = moveit_servo::ServoParameters::makeServoParameters(node,"servo_node"); //ungeneralized
     // this probably gets the servo parameters through the node shared ptr, 
     // but not sure how this will work when there are multiple servo nodes, 
     // hence multiple servo parameters, also, this might be only the ros servo 

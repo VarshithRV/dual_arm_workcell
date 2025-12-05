@@ -67,8 +67,7 @@ install(DIRECTORY launch
 )
 
 add_executable(predefined_state_server src/predefined_state_server.cpp)
-ament_target_dependencies(predefined_state_server example_interfaces rclcpp 
-geometry_msgs moveit_ros_planning_interface moveit_core)
+ament_target_dependencies(predefined_state_server ${THIS_PACKAGE_INCLUDE_DEPENDS})
 install(TARGETS
 predefined_state_server
 DESTINATION lib/${PROJECT_NAME}

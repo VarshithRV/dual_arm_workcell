@@ -148,8 +148,7 @@ public:
                     current_pose.pose.position.y,
                     current_pose.pose.position.z);
 
-        callback_group_ = node_->create_callback_group(
-            rclcpp::CallbackGroupType::Reentrant);
+        callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
         print_state_server_ = node_->create_service<example_interfaces::srv::Trigger>(
             "~/print_robot_state",

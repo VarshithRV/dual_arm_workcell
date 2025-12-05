@@ -30,8 +30,6 @@ def launch_setup(context, *args, **kwargs):
     moveit_joint_limits_file = LaunchConfiguration("moveit_joint_limits_file")
     moveit_config_file = LaunchConfiguration("moveit_config_file")
     use_sim_time = LaunchConfiguration("use_sim_time")
-    launch_rviz = LaunchConfiguration("launch_rviz")
-    launch_servo = LaunchConfiguration("launch_servo")
     
     left_ur_type = LaunchConfiguration("left_ur_type")
     left_safety_limits = LaunchConfiguration("left_safety_limits")
@@ -39,15 +37,9 @@ def launch_setup(context, *args, **kwargs):
     left_safety_k_position = LaunchConfiguration("left_safety_k_position")
     left_kinematics_params_file = LaunchConfiguration("left_kinematics_params_file")
     
-    left_joint_limit_params = PathJoinSubstitution(
-        [FindPackageShare(description_package), "config", left_ur_type, "joint_limits.yaml"]
-    )
-    left_physical_params = PathJoinSubstitution(
-        [FindPackageShare(description_package), "config", left_ur_type, "physical_parameters.yaml"]
-    )
-    left_visual_params = PathJoinSubstitution(
-        [FindPackageShare(description_package), "config", left_ur_type, "visual_parameters.yaml"]
-    )
+    left_joint_limit_params = PathJoinSubstitution([FindPackageShare(description_package), "config", left_ur_type, "joint_limits.yaml"])
+    left_physical_params = PathJoinSubstitution([FindPackageShare(description_package), "config", left_ur_type, "physical_parameters.yaml"])
+    left_visual_params = PathJoinSubstitution([FindPackageShare(description_package), "config", left_ur_type, "visual_parameters.yaml"])
 
     right_ur_type = LaunchConfiguration("right_ur_type")
     right_safety_limits = LaunchConfiguration("right_safety_limits")
@@ -55,15 +47,9 @@ def launch_setup(context, *args, **kwargs):
     right_safety_k_position = LaunchConfiguration("right_safety_k_position")
     right_kinematics_params_file = LaunchConfiguration("right_kinematics_params_file")
     
-    right_joint_limit_params = PathJoinSubstitution(
-        [FindPackageShare(description_package), "config", right_ur_type, "joint_limits.yaml"]
-    )
-    right_physical_params = PathJoinSubstitution(
-        [FindPackageShare(description_package), "config", right_ur_type, "physical_parameters.yaml"]
-    )
-    right_visual_params = PathJoinSubstitution(
-        [FindPackageShare(description_package), "config", right_ur_type, "visual_parameters.yaml"]
-    )
+    right_joint_limit_params = PathJoinSubstitution([FindPackageShare(description_package), "config", right_ur_type, "joint_limits.yaml"])
+    right_physical_params = PathJoinSubstitution([FindPackageShare(description_package), "config", right_ur_type, "physical_parameters.yaml"])
+    right_visual_params = PathJoinSubstitution([FindPackageShare(description_package), "config", right_ur_type, "visual_parameters.yaml"])
 
     robot_description_content = Command(
         [
@@ -236,22 +222,6 @@ def launch_setup(context, *args, **kwargs):
         "publish_transforms_updates": True,
     }
 
-    robot_description_kinematics = {
-    "robot_description_kinematics": {
-        "left_ur16e": {
-            "kinematics_solver": "kdl_kinematics_plugin/KDLKinematicsPlugin",
-            "kinematics_solver_attempts": 3,
-            "kinematics_solver_search_resolution": 0.005,
-            "kinematics_solver_timeout": 0.005,
-        },
-        "right_ur16e": {
-            "kinematics_solver": "kdl_kinematics_plugin/KDLKinematicsPlugin",
-            "kinematics_solver_attempts": 3,
-            "kinematics_solver_search_resolution": 0.005,
-            "kinematics_solver_timeout": 0.005,
-        }
-    }}
-
     left_servo_params = {
         "left_servo_node_main": ParameterBuilder("motion_planning_abstractions")
         .yaml("config/left_pose_tracker.yaml")
@@ -281,7 +251,7 @@ def launch_setup(context, *args, **kwargs):
             trajectory_execution,
             moveit_controllers,
             planning_scene_monitor_parameters,
-            {"use_sim_time": use_sim_time}, # setting use_sim_time = True screws up the planning scene monitor, but setting it up False just reads at time 0
+            {"use_sim_time": use_sim_time},
             left_servo_params,
         ]
     )
@@ -363,6 +333,8 @@ def launch_setup(context, *args, **kwargs):
         name="left_preaction_server",
         output="screen",
         parameters=[
+            robot_description,
+            robot_description_semantic,
             robot_description_kinematics,
             {
                 "planning_group": "left_ur16e",
@@ -372,6 +344,7 @@ def launch_setup(context, *args, **kwargs):
                 "wrist_1": -2.125268121758932,
                 "wrist_2": 1.45247220993042,
                 "wrist_3": 1.677489995956421,
+                "side":"left",
             },
             {"use_sim_time":use_sim_time},
         ],
@@ -392,6 +365,7 @@ def launch_setup(context, *args, **kwargs):
                 "wrist_1": -1.1249484878829499,
                 "wrist_2": -1.3437789122210901,
                 "wrist_3": -1.0042908827411097,
+                "side":"right",
             },
             {"use_sim_time":use_sim_time},
         ],
@@ -412,6 +386,7 @@ def launch_setup(context, *args, **kwargs):
                 "wrist_1": -1.2700193685344239,
                 "wrist_2": 1.9041476249694824,
                 "wrist_3": -1.182901684437887,
+                "side":"left",
             },
             {"use_sim_time":use_sim_time},
         ],
@@ -432,6 +407,7 @@ def launch_setup(context, *args, **kwargs):
                 "wrist_1": -1.8108145199217738,
                 "wrist_2": -2.130192581807272,
                 "wrist_3": 0.8935091495513916,
+                "side":"right",
             },
             {"use_sim_time":use_sim_time},
         ],
@@ -439,12 +415,12 @@ def launch_setup(context, *args, **kwargs):
 
     nodes_to_start = [
         # left_pose_tracking_node,
-        rws_pick_and_place_server,
-        suction_pick_and_place_server,
+        # rws_pick_and_place_server,
+        # suction_pick_and_place_server,
         left_preaction_server,
-        right_preaction_server,
-        left_rest_server,
-        right_rest_server,
+        # right_preaction_server,
+        # left_rest_server,
+        # right_rest_server,
     ]
     
     return nodes_to_start
@@ -640,6 +616,4 @@ def generate_launch_description():
         )
     )
     
-    return LaunchDescription(declared_arguments + 
-                             [OpaqueFunction(function=launch_setup)]
-                            )
+    return LaunchDescription(declared_arguments + [OpaqueFunction(function=launch_setup)])
