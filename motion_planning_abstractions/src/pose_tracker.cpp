@@ -1,156 +1,333 @@
-// Node for pose tracking for a single arm
-// Right now hardcode for a single arm, later generalize for different move groups
-// Apart from the the servo parameters, no other parameters
+// pose tracker node
+// tracks a pose provided by a topic
+// to prepare, need to switch controller from ${non_servo_controller} ${servo_controller} to if required
+// to reset before exiting, switch controller from ${servo_controller} ${non_servo_controller} and stop_servo
 
-#include <std_msgs/msg/int8.hpp>
+/*
+internal methods required  : 
+1. switch_controller 
+2. start/stop servo
+*/
 
+/*
+parameters required : 
+1. PID gains
+2. planning group
+3. arm_side
+4. max_speed
+5. servo_controller
+6. non_servo_controller
+7. servo_namespace (name of the servo node)
+9. end_effector_link
+*/
+
+
+#include <memory>
+#include <functional>
+#include <string>
+#include <chrono>
+#include <cstdlib>
+#include <thread>
+#include <vector>
+#include <cmath>
+
+#include "rclcpp/rclcpp.hpp"
+#include "rclcpp/executors/multi_threaded_executor.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/point.hpp"
-#include "rclcpp/rclcpp.hpp"
-#include "rclcpp/executors/multi_threaded_executor.hpp"
+#include "example_interfaces/srv/trigger.hpp"
+#include "motion_planning_abstractions_msgs/srv/pick.hpp"
+#include "ur_msgs/srv/set_io.hpp"
+#include "open_set_object_detection_msgs/srv/get_object_locations.hpp"
+#include "moveit/move_group_interface/move_group_interface.h"
+#include "moveit_msgs/msg/robot_trajectory.hpp"
 #include "rmw/qos_profiles.h"
-#include <moveit_servo/servo.h>
-#include <moveit_servo/pose_tracking.h>
-#include <moveit_servo/status_codes.h>
-#include <moveit_servo/servo_parameters.h>
-#include <moveit_servo/make_shared_from_pool.h>
-#include <chrono>
+#include "geometry_msgs/msg/wrench_stamped.hpp"
+#include "controller_manager_msgs/srv/switch_controller.hpp"
+#include "std_srvs/srv/trigger.hpp"
+#include "geometry_msgs/msg/twist_stamped.hpp"
 
-#include <thread>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
-using namespace std::literals::chrono_literals;
 
-static const rclcpp::Logger LOGGER = rclcpp::get_logger("left_pose_tracker");
+using namespace std::chrono_literals;
+using moveit::planning_interface::MoveGroupInterface;
 
-// class for monitoring status of moveit_servo, basically monitors a status topic and then interprets it
-class StatusMonitor{
-    public:
-        StatusMonitor(const rclcpp::Node::SharedPtr& node, const std::string& topic){
-            sub_=node->create_subscription<std_msgs::msg::Int8>(topic, rclcpp::SystemDefaultsQoS(),
-                                                                [this](const std_msgs::msg::Int8::ConstSharedPtr& msg){ //lambda for subscription lmao, nice
-                                                                    return statusCB(msg);
-                                                                });
+
+class PickPlace
+{
+public:
+    PickPlace()
+    {
+        node_ = std::make_shared<rclcpp::Node>("pose_tracker");
+
+        // declare parameters
+        node_->declare_parameter<std::string>("planning_group", "left_ur16e");
+        node_->declare_parameter<std::string>("arm_side", "left");
+        node_->declare_parameter<std::string>("endeffector_link", "left_tool0");
+        node_->declare_parameter<std::string>("servo_controller", "left_forward_position_controller");
+        node_->declare_parameter<std::string>("non_servo_controller", "left_scaled_joint_trajectory_controller");
+        node_->declare_parameter<std::string>("servo_node_namespace", "left_servo_node_main");
+
+        node_->declare_parameter<double>("P_GAIN", 1.0);
+        node_->declare_parameter<double>("I_GAIN", 1.0);
+        node_->declare_parameter<double>("D_GAIN", 1.0);
+        node_->declare_parameter<double>("K_GAIN", 1.0);
+        node_->declare_parameter<double>("max_speed", 1.0); // in ms-1
+        
+        // get parameters
+        planning_group_ = node_->get_parameter("planning_group").as_string();
+        arm_side_ = node_->get_parameter("arm_side").as_string();
+        endeffector_link_ = node_->get_parameter("endeffector_link").as_string();
+        servo_controller_ = node_->get_parameter("servo_controller").as_string();
+        non_servo_controller_ = node_->get_parameter("non_servo_controller").as_string();
+        servo_node_namespace_ = node_->get_parameter("servo_node_namespace").as_string();
+
+        P_GAIN_ = node_->get_parameter("P_GAIN").as_double();
+        I_GAIN_ = node_->get_parameter("I_GAIN").as_double();
+        D_GAIN_ = node_->get_parameter("D_GAIN").as_double();
+        K_GAIN_ = node_->get_parameter("K_GAIN").as_double();
+        max_speed_ = node_->get_parameter("max_speed").as_double();
+
+        // move group interface setup
+        rclcpp::NodeOptions node_options;
+        node_options.automatically_declare_parameters_from_overrides(true);
+        node_options.use_global_arguments(false);
+        std::string moveit_node_name = std::string(node_->get_name()) + "_moveit";
+
+        moveit_node_ = std::make_shared<rclcpp::Node>(moveit_node_name, node_options);
+        move_group_interface_ = std::make_shared<MoveGroupInterface>(moveit_node_, planning_group_);
+
+        move_group_interface_->setEndEffectorLink(endeffector_link_);
+        move_group_interface_->setPlanningTime(10.0);
+        move_group_interface_->setNumPlanningAttempts(15);
+        move_group_interface_->setMaxVelocityScalingFactor(0.1);
+        move_group_interface_->setMaxAccelerationScalingFactor(0.1);
+        move_group_interface_->setPlannerId("RRTConnectkConfigDefault");
+        move_group_interface_->startStateMonitor();
+
+        executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
+        executor_->add_node(node_);
+        moveit_executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+        moveit_executor_->add_node(moveit_node_);
+
+        rclcpp::sleep_for(3s);
+
+        // display some mgi stuff
+        auto planning_frame = this->move_group_interface_->getPlanningFrame();
+        RCLCPP_INFO(node_->get_logger(), "Planning frame : %s", planning_frame.c_str());
+
+        auto endeffector = this->move_group_interface_->getEndEffectorLink();
+        RCLCPP_INFO(node_->get_logger(), "End Effector Link : %s", endeffector.c_str());
+
+        auto current_pose = this->move_group_interface_->getCurrentPose(endeffector);
+        RCLCPP_INFO(node_->get_logger(),
+                    "x : %f, y : %f, z : %f",
+                    current_pose.pose.position.x,
+                    current_pose.pose.position.y,
+                    current_pose.pose.position.z);
+
+        callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+
+        print_state_server_ = node_->create_service<example_interfaces::srv::Trigger>(
+            "~/print_robot_state",
+            std::bind(&PickPlace::print_state, this,
+                      std::placeholders::_1, std::placeholders::_2),
+            rmw_qos_profile_services_default,
+            callback_group_);
+
+        switch_controller_client_ = node_->create_client<controller_manager_msgs::srv::SwitchController>("controller_manager/switch_controller",
+        rmw_qos_profile_services_default, callback_group_);
+
+        std::string start_servo_service_name = servo_node_namespace_ + "/start_servo";
+        start_servo_client_ = node_->create_client<std_srvs::srv::Trigger>(start_servo_service_name,
+        rmw_qos_profile_services_default,
+        callback_group_);
+
+        std::string stop_servo_service_name = servo_node_namespace_ + "/stop_servo";
+        stop_servo_client_ = node_->create_client<std_srvs::srv::Trigger>(stop_servo_service_name,
+        rmw_qos_profile_services_default,
+        callback_group_);
+
+        std::string delta_twist_cmd_topic = servo_node_namespace_ + "/delta_twist_cmds";
+        delta_twist_cmd_publisher_ = node_->create_publisher<geometry_msgs::msg::TwistStamped>(delta_twist_cmd_topic,10);
+        
+        thread_ = std::thread([this](){moveit_executor_->spin();});
+        executor_->spin();
+    }
+
+    bool switch_controller(){
+        RCLCPP_INFO(node_->get_logger(),"Switching controller");
+        auto request = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
+        request->activate_controllers = std::vector<std::string>{servo_controller_};
+        request->deactivate_controllers = std::vector<std::string>{non_servo_controller_};
+        request->strictness = request->BEST_EFFORT;
+
+        auto future = switch_controller_client_->async_send_request(request);
+
+        if (future.wait_for(10s) != std::future_status::ready){
+            RCLCPP_ERROR(node_->get_logger(), "Switch controller service call timed out!");
         }
-
-    private:
-        void statusCB(const std_msgs::msg::Int8::ConstSharedPtr& msg){ //need to revise how to learn the reference operator
-            moveit_servo::StatusCode latest_status = static_cast<moveit_servo::StatusCode>(msg->data);
-            if(latest_status!=status_){
-                status_ = latest_status;
-                const auto& status_str = moveit_servo::SERVO_STATUS_CODE_MAP.at(status_);
-                RCLCPP_INFO_STREAM(LOGGER,"Servo status : "<< status_str);
+        else{
+            auto resp = future.get();
+            if (resp->ok){
+                RCLCPP_INFO(node_->get_logger(),"Service successful");
+                return true;
+            }
+            else{
+                RCLCPP_ERROR(node_->get_logger(),"Service couldn't swith controller");
+                return false;
             }
         }
-        moveit_servo::StatusCode status_=moveit_servo::StatusCode::INVALID;
-        rclcpp::Subscription<std_msgs::msg::Int8>::SharedPtr sub_;
+    }
+
+    bool switch_back_controller(){
+        RCLCPP_INFO(node_->get_logger(),"Switching back controller");
+        auto request = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
+        request->activate_controllers = std::vector<std::string>{servo_controller_};
+        request->deactivate_controllers = std::vector<std::string>{non_servo_controller_};
+        request->strictness = request->BEST_EFFORT;
+
+        auto future = switch_controller_client_->async_send_request(request);
+
+        if (future.wait_for(10s) != std::future_status::ready){
+            RCLCPP_ERROR(node_->get_logger(), "Switch controller service call timed out!");
+        }
+        else{
+            auto resp = future.get();
+            if (resp->ok){
+                RCLCPP_INFO(node_->get_logger(),"Service successful");
+                return true;
+            }
+            else{
+                RCLCPP_ERROR(node_->get_logger(),"Service couldn't swith controller");
+                return false;
+            }
+        }
+    }
+
+    bool start_servo(){
+        RCLCPP_INFO(node_->get_logger(),"Starting servo service call");
+        auto request = std::make_shared<std_srvs::srv::Trigger_Request>();
+        auto future = start_servo_client_->async_send_request(request);
+        if (future.wait_for(10s) != std::future_status::ready){
+            RCLCPP_ERROR(node_->get_logger(), "Start servo service call timed out!");
+            return false;
+        }
+        return future.get()->success;
+    }
+
+    bool stop_servo(){
+        RCLCPP_INFO(node_->get_logger(),"Stopping servo");
+        auto request = std::make_shared<std_srvs::srv::Trigger_Request>();
+        auto future = stop_servo_client_->async_send_request(request);
+        if (future.wait_for(10s) != std::future_status::ready){
+            RCLCPP_ERROR(node_->get_logger(), "Stop servo service call timed out!");
+            return false;
+        }
+        return future.get()->success;
+    }
+
+    void move_to_pose(const geometry_msgs::msg::Pose &pose)
+    {
+        move_group_interface_->setPoseTarget(pose);
+        auto const [success, plan] = [this]
+        {
+            moveit::planning_interface::MoveGroupInterface::Plan msg;
+            auto const ok = static_cast<bool>(this->move_group_interface_->plan(msg));
+            return std::make_pair(ok, msg);
+        }();
+        if (success)
+        {
+            move_group_interface_->execute(plan);
+        }
+        else
+        {
+            RCLCPP_ERROR(node_->get_logger(), "Planning Failed");
+        }
+        move_group_interface_->clearPoseTargets();
+    }
+
+    void print_state(const example_interfaces::srv::Trigger::Request::SharedPtr,example_interfaces::srv::Trigger::Response::SharedPtr response){
+        auto current_state = move_group_interface_->getCurrentState();
+        (void)current_state;
+        auto current_pose = move_group_interface_->getCurrentPose();
+        auto current_joint_values = move_group_interface_->getCurrentJointValues();
+
+        auto print_pose = [this, current_joint_values, current_pose]()
+        {
+            double x = current_pose.pose.position.x;
+            double y = current_pose.pose.position.y;
+            double z = current_pose.pose.position.z;
+            double qx = current_pose.pose.orientation.x;
+            double qy = current_pose.pose.orientation.y;
+            double qz = current_pose.pose.orientation.z;
+            double qw = current_pose.pose.orientation.w;
+
+            RCLCPP_INFO(this->node_->get_logger(), "X : %f", x);
+            RCLCPP_INFO(this->node_->get_logger(), "Y : %f", y);
+            RCLCPP_INFO(this->node_->get_logger(), "Z : %f", z);
+            RCLCPP_INFO(this->node_->get_logger(), "Qx : %f", qx);
+            RCLCPP_INFO(this->node_->get_logger(), "Qy : %f", qy);
+            RCLCPP_INFO(this->node_->get_logger(), "Qz : %f", qz);
+            RCLCPP_INFO(this->node_->get_logger(), "Qw : %f", qw);
+
+            std::string message;
+            for (std::size_t i = 0; i < current_joint_values.size(); i++)
+            {
+                message += "Joint " + std::to_string(i) + ": " +
+                           std::to_string(current_joint_values[i]) + "\n";
+            }
+            message += "X : " + std::to_string(x) +
+                       " Y : " + std::to_string(y) +
+                       " Z : " + std::to_string(z);
+            return message;
+        };
+
+        response->message = print_pose();
+        response->success = true;
+    }
+
+private:
+    std::thread thread_;
+    std::shared_ptr<MoveGroupInterface> move_group_interface_;
+    rclcpp::Node::SharedPtr node_;
+    rclcpp::Node::SharedPtr moveit_node_;
+    rclcpp::executors::MultiThreadedExecutor::SharedPtr executor_;
+    rclcpp::executors::SingleThreadedExecutor::SharedPtr moveit_executor_;
+    rclcpp::CallbackGroup::SharedPtr callback_group_;
+    rclcpp::Service<example_interfaces::srv::Trigger>::SharedPtr print_state_server_;
+    rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedPtr switch_controller_client_;
+    rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr start_servo_client_;
+    rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr stop_servo_client_;
+    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr delta_twist_cmd_publisher_;
+    
+    rclcpp::Clock system_clock_;
+    
+    // ros parameters
+    std::string planning_group_;
+    std::string arm_side_;
+    std::string endeffector_link_;
+    std::string servo_controller_;
+    std::string non_servo_controller_;
+    std::string servo_node_namespace_;
+    
+    double P_GAIN_;
+    double I_GAIN_;
+    double D_GAIN_;
+    double K_GAIN_;
+    double max_speed_;
+
 };
 
-int main(int argc, char** argv){
-    rclcpp::init(argc,argv);
-    rclcpp::Node::SharedPtr node = rclcpp::Node::make_shared("left_pose_tracker"); //ungeneralized.
-    
-    rclcpp::executors::SingleThreadedExecutor executor;
-    executor.add_node(node);
-    std::thread executor_thread([&executor](){executor.spin();});
+int main(int argc, char *argv[])
+{
+    rclcpp::init(argc, argv);
 
-    auto servo_parameters = moveit_servo::ServoParameters::makeServoParameters(node,"servo_node"); //ungeneralized
-    // this probably gets the servo parameters through the node shared ptr, 
-    // but not sure how this will work when there are multiple servo nodes, 
-    // hence multiple servo parameters, also, this might be only the ros servo 
-    // parameters local to this node
-    
-    if(servo_parameters == nullptr){
-        RCLCPP_FATAL(LOGGER,"Could not get servo parameters!");
-        exit(EXIT_FAILURE);
-    }
-
-    // load the planning scene monitor
-    planning_scene_monitor::PlanningSceneMonitorPtr planning_scene_monitor;
-    planning_scene_monitor = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(node,"robot_description");
-    if(!planning_scene_monitor->getPlanningScene()){
-        RCLCPP_ERROR_STREAM(LOGGER,"Error in setting up the PlanningSceneMonitor");
-        exit(EXIT_FAILURE);
-    }
-
-    planning_scene_monitor->providePlanningSceneService();
-    planning_scene_monitor->startSceneMonitor();
-    planning_scene_monitor->startWorldGeometryMonitor(
-        planning_scene_monitor::PlanningSceneMonitor::DEFAULT_COLLISION_OBJECT_TOPIC,
-        planning_scene_monitor::PlanningSceneMonitor::DEFAULT_PLANNING_SCENE_WORLD_TOPIC,
-        false //skip octomap monitor (i'm assuming this will be true when we have depth maps)
-    );
-    planning_scene_monitor->startStateMonitor(servo_parameters->joint_topic);
-    planning_scene_monitor->startPublishingPlanningScene(planning_scene_monitor::PlanningSceneMonitor::UPDATE_SCENE);
-
-    // wait for planning scene monitor to setup
-    if(!planning_scene_monitor->waitForCurrentRobotState(node->get_clock()->now(),5.0)){
-        RCLCPP_ERROR_STREAM(LOGGER,"Error waiting for current robot state in PlanningSceneMonitor.");
-        exit(EXIT_FAILURE);
-    }
-
-    // create the pose tracker?
-    moveit_servo::PoseTracking tracker(node, servo_parameters, planning_scene_monitor);
-
-    // make a publisher for sending pose commands
-    auto target_pose_pub = node->create_publisher<geometry_msgs::msg::PoseStamped>( //ungeneralized
-        "target_pose",
-        rclcpp::SystemDefaultsQoS()
-    );
-
-    // subscribe to servo status, earlier written class
-    StatusMonitor status_monitor(node, servo_parameters->status_topic);
-
-    Eigen::Vector3d lin_tol{0.001, 0.001, 0.001}; //ahhh tolerance?
-    double rot_tol = 0.01; // rotation tolerance hahaha, we had this too lmao
-
-    // get the current ee tf
-    geometry_msgs::msg::TransformStamped current_ee_tf;
-    tracker.getCommandFrameTransform(current_ee_tf);
-
-    // convert it to a pose
-    geometry_msgs::msg::PoseStamped target_pose;
-    target_pose.header.frame_id=current_ee_tf.header.frame_id;
-    target_pose.pose.position.x = current_ee_tf.transform.translation.x;
-    target_pose.pose.position.y = current_ee_tf.transform.translation.y;
-    target_pose.pose.position.z = current_ee_tf.transform.translation.z;
-    target_pose.pose.orientation = current_ee_tf.transform.rotation;
-
-    // modify it a bit ig
-    target_pose.pose.position.x += 0.1;
-
-    // reset target pose
-    tracker.resetTargetPose();
-
-    // publish target pose
-    target_pose.header.stamp = node->now();
-    target_pose_pub->publish(target_pose);
-
-    // run the pose tracking in a new thread
-    std::thread move_to_pose_thread([&tracker,&lin_tol,&rot_tol]{
-        moveit_servo::PoseTrackingStatusCode tracking_status =
-        tracker.moveToPose(lin_tol, rot_tol, 0.1/*target pose timeout*/);
-        RCLCPP_INFO_STREAM(LOGGER,"Pose tracker exited with status: " << moveit_servo::POSE_TRACKING_STATUS_CODE_MAP.at(tracking_status));
-    });
-
-    rclcpp::WallRate loop_rate(50);
-    for(size_t i=0; i<500; ++i){
-        // modify the pose target a little bit each cycle
-        // this is a dynamic pose target
-        target_pose.pose.position.z += 0.0004;
-        target_pose.header.stamp = node->now();
-        target_pose_pub->publish(target_pose);
-
-        loop_rate.sleep();
-    }
-
-    // make sure the tracker is stopped and clean up
-    move_to_pose_thread.join();
-
-    // kill executor thread before shutdown
-    executor.cancel();
-    executor_thread.join();
+    auto moveit_example = PickPlace();
 
     rclcpp::shutdown();
-    return EXIT_SUCCESS;
+    return 0;
 }
