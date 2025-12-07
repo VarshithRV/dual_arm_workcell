@@ -37,6 +37,7 @@ parameters required :
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/point.hpp"
 #include "std_srvs/srv/trigger.hpp"
+#include "std_srvs/srv/set_bool.hpp"
 #include "motion_planning_abstractions_msgs/srv/pick.hpp"
 #include "ur_msgs/srv/set_io.hpp"
 #include "open_set_object_detection_msgs/srv/get_object_locations.hpp"
@@ -47,10 +48,18 @@ parameters required :
 #include "controller_manager_msgs/srv/switch_controller.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
+#include "geometry_msgs/msg/twist.hpp"
+#include <Eigen/Geometry>
 
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
+
+#define READY 0
+#define NOT_READY 1
+
+#define ON 1
+#define OFF 0
 
 using namespace std::chrono_literals;
 using moveit::planning_interface::MoveGroupInterface;
@@ -76,6 +85,8 @@ public:
         node_->declare_parameter<double>("D_GAIN", 1.0);
         node_->declare_parameter<double>("K_GAIN", 1.0);
         node_->declare_parameter<double>("max_speed", 1.0); // in ms-1
+        node_->declare_parameter<double>("linear_stop_threshold",0.001); // m
+        node_->declare_parameter<double>("angular_stop_threshold",0.01); // rad
         
         // get parameters
         planning_group_ = node_->get_parameter("planning_group").as_string();
@@ -90,6 +101,8 @@ public:
         D_GAIN_ = node_->get_parameter("D_GAIN").as_double();
         K_GAIN_ = node_->get_parameter("K_GAIN").as_double();
         max_speed_ = node_->get_parameter("max_speed").as_double();
+        linear_stop_threshold_ = node_->get_parameter("linear_stop_threshold").as_double();
+        angular_stop_threshold_ = node_->get_parameter("angular_stop_threshold").as_double();
 
         // move group interface setup
         rclcpp::NodeOptions node_options;
@@ -142,15 +155,27 @@ public:
             std::bind(&PoseTracker::prepare_tracker_callback_,this,std::placeholders::_1,std::placeholders::_2),
             rmw_qos_profile_services_default,
             callback_group_
-            
         );
 
         unprepare_tracker_ = node_->create_service<std_srvs::srv::Trigger>("~/unprepare_tracker",
             std::bind(&PoseTracker::unprepare_tracker_callback_,this,std::placeholders::_1,std::placeholders::_2),
             rmw_qos_profile_services_default,
             callback_group_
-            
         );
+        
+        set_lock_ = node_->create_service<std_srvs::srv::SetBool>("~/set_lock",
+            std::bind(&PoseTracker::set_lock_callback_,this,std::placeholders::_1,std::placeholders::_2),
+            rmw_qos_profile_services_default,
+            callback_group_
+        );
+
+        // FOR TESTING STUFF //
+        auto test_tracker_ = node_->create_service<std_srvs::srv::Trigger>("~/test_tracker",
+            std::bind(&PoseTracker::track_target_pose_,this,std::placeholders::_1,std::placeholders::_2),
+            rmw_qos_profile_services_default,
+            callback_group_  
+        );
+        ////
         
         // clients
         switch_controller_client_ = node_->create_client<controller_manager_msgs::srv::SwitchController>("controller_manager/switch_controller",
@@ -179,6 +204,12 @@ public:
         std::string delta_twist_cmd_topic = servo_node_namespace_ + "/delta_twist_cmds";
         delta_twist_cmd_publisher_ = node_->create_publisher<geometry_msgs::msg::TwistStamped>(delta_twist_cmd_topic,10);
         
+        // subscribers
+        target_pose_subscription_ = node_->create_subscription<geometry_msgs::msg::Pose>("~/target_pose",
+            10,
+            std::bind(&PoseTracker::target_pose_callback_,this,std::placeholders::_1)
+        );
+
         thread_ = std::thread([this](){moveit_executor_->spin();});
         executor_->spin();
     }
@@ -328,6 +359,7 @@ public:
                 RCLCPP_INFO(node_->get_logger(),"Done");
                 response->message = "preparation complete";
                 response->success = true;
+                current_state = READY;
             }
             else{
                 RCLCPP_ERROR(node_->get_logger(),"Error starting servo, switching back controller to non servo type");
@@ -348,6 +380,9 @@ public:
             RCLCPP_INFO(node_->get_logger(),"Stopping servo");
             if(stop_servo()){
                 RCLCPP_INFO(node_->get_logger(),"Done");
+                response->message = "unpreparation complete";
+                response->success = true;
+                current_state = NOT_READY;
             }
             else{
                 RCLCPP_ERROR(node_->get_logger(),"Error stopping servo");
@@ -357,6 +392,60 @@ public:
             RCLCPP_ERROR(node_->get_logger(),"Error switching to non servo type controller");
     }
 
+    void set_lock_callback_(const std_srvs::srv::SetBool_Request::SharedPtr request, std_srvs::srv::SetBool_Response::SharedPtr response){
+        lock = int(request->data);
+        response->success = true;
+    }
+
+    void target_pose_callback_(const geometry_msgs::msg::Pose::SharedPtr msg){
+        this->target_pose_ = *msg;
+    }
+
+    void track_target_pose_(const std_srvs::srv::Trigger_Request::SharedPtr request, std_srvs::srv::Trigger_Response::SharedPtr response){
+        // here we use the input target pose and control the end effector to publish the velocity to control
+        // linear_velocity = PID(target_pose.linear - current_pose.linear)
+        // rotation_velocity = PID(target_pose.orientation,current_pose.orientation) 
+        
+        /*
+            minimally need to calculate the linear and rotational error, linear and rotational velocity of the error
+        */
+        
+        /*
+            currently using a service to test stuff
+            need to add a watchdog timer to the target 
+            need to add a low pass filter to output velocity
+            for d, need to compute error velocity and need to compute velocity of the orientation error
+        */
+        
+        auto current_pose = this->move_group_interface_->getCurrentPose();
+        
+        Eigen::Vector3d current_linear = {current_pose.pose.position.x,current_pose.pose.position.y,current_pose.pose.position.z};
+        Eigen::Vector3d target_pose_linear = {target_pose_.position.x,target_pose_.position.y,target_pose_.position.z};
+        Eigen::Vector3d linear_error_ = target_pose_linear - current_linear;
+
+        Eigen::Quaterniond current_orientation_q = {current_pose.pose.orientation.w, current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z};
+        Eigen::Quaterniond target_orientation_q = {target_pose_.orientation.w, target_pose_.orientation.x, target_pose_.orientation.y, target_pose_.orientation.z};
+        
+        auto target_orientation_normalized_q = target_orientation_q.normalized();
+
+        Eigen::Quaterniond orientation_error_q =  target_orientation_normalized_q * current_orientation_q.inverse();
+        
+        // just p controller for now
+        auto linear_velocity = [this,linear_error_](){
+            return K_GAIN_*P_GAIN_*linear_error_;
+        }();
+
+        auto angular_velocity = [this,orientation_error_q](){
+            Eigen::AngleAxisd ungained_angular_velocity(orientation_error_q);
+            RCLCPP_INFO(node_->get_logger(),"Angle axis error : %f,%f,%f,%f",ungained_angular_velocity.angle(),ungained_angular_velocity.axis()[0],ungained_angular_velocity.axis()[1],ungained_angular_velocity.axis()[2]);
+            return K_GAIN_*P_GAIN_*ungained_angular_velocity.angle()*ungained_angular_velocity.axis();
+        }();
+
+        RCLCPP_INFO(node_->get_logger(),"Linear Error : %f,%f,%f",linear_error_[0],linear_error_[1],linear_error_[2]);
+        RCLCPP_INFO(node_->get_logger(),"Quaternion Error : %f,%f,%f,%f",orientation_error_q.w(),orientation_error_q.x(),orientation_error_q.y(),orientation_error_q.z());
+        RCLCPP_INFO(node_->get_logger(),"Linear velocity : %f,%f,%f",linear_velocity[0],linear_velocity[1],linear_velocity[2]);
+        RCLCPP_INFO(node_->get_logger(),"Angular velocity : %f,%f,%f",angular_velocity[0],angular_velocity[1],angular_velocity[2]);
+    }
 
 private:
     std::thread thread_;
@@ -373,7 +462,11 @@ private:
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr delta_twist_cmd_publisher_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr prepare_tracker_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr unprepare_tracker_;
+    rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr set_lock_;
+    rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr target_pose_subscription_;
     
+    geometry_msgs::msg::Pose target_pose_ ;
+
     rclcpp::Clock system_clock_;
     
     // ros parameters
@@ -389,6 +482,11 @@ private:
     double D_GAIN_;
     double K_GAIN_;
     double max_speed_;
+    double linear_stop_threshold_;
+    double angular_stop_threshold_;
+
+    uint8_t current_state=NOT_READY;
+    uint8_t lock=ON;
 
 };
 
