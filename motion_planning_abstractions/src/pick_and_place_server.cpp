@@ -12,7 +12,7 @@
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/point.hpp"
-#include "example_interfaces/srv/trigger.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include "motion_planning_abstractions_msgs/srv/pick.hpp"
 #include "ur_msgs/srv/set_io.hpp"
 
@@ -125,7 +125,7 @@ class PickPlace{
             auto current_pose = this->move_group_interface_->getCurrentPose(endeffector); // this consistently returns a wrong value dont know why, some executor shit
             RCLCPP_INFO(node_->get_logger(), "x : %f, y : %f, z : %f",current_pose.pose.position.x,current_pose.pose.position.y,current_pose.pose.position.z);
 
-            print_state_server_= node_->create_service<example_interfaces::srv::Trigger>("~/print_robot_state",std::bind(&PickPlace::print_state,this,std::placeholders::_1,std::placeholders::_2));
+            print_state_server_= node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",std::bind(&PickPlace::print_state,this,std::placeholders::_1,std::placeholders::_2));
             pick_and_place_server_ = node_->create_service<motion_planning_abstractions_msgs::srv::Pick>("~/pick_and_place",std::bind(&PickPlace::pick_and_place_server,this,std::placeholders::_1,std::placeholders::_2));
             std::string io_service_name = arm_side_ + "_io_and_status_controller/set_io";
             set_io_client_ = node_->create_client<ur_msgs::srv::SetIO>(io_service_name);
@@ -305,7 +305,7 @@ class PickPlace{
         }
 
 
-        void print_state(const example_interfaces::srv::Trigger_Request::SharedPtr request, example_interfaces::srv::Trigger_Response::SharedPtr response){ // not working, stupid timer issue
+        void print_state(const std_srvs::srv::Trigger_Request::SharedPtr request, std_srvs::srv::Trigger_Response::SharedPtr response){ // not working, stupid timer issue
             auto current_state = move_group_interface_->getCurrentState();
             auto current_pose = move_group_interface_->getCurrentPose();
             auto current_joint_values = move_group_interface_->getCurrentJointValues();
@@ -341,7 +341,7 @@ class PickPlace{
         rclcpp::Node::SharedPtr moveit_node_;
         rclcpp::Executor::SharedPtr moveit_executor_;
         std::thread thread_;
-        rclcpp::Service<example_interfaces::srv::Trigger>::SharedPtr print_state_server_;
+        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_state_server_;
         rclcpp::Service<motion_planning_abstractions_msgs::srv::Pick>::SharedPtr pick_and_place_server_;
         rclcpp::Client<ur_msgs::srv::SetIO>::SharedPtr set_io_client_;
         std::string planning_group_;

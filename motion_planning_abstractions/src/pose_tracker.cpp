@@ -36,7 +36,7 @@ parameters required :
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/point.hpp"
-#include "example_interfaces/srv/trigger.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include "motion_planning_abstractions_msgs/srv/pick.hpp"
 #include "ur_msgs/srv/set_io.hpp"
 #include "open_set_object_detection_msgs/srv/get_object_locations.hpp"
@@ -115,7 +115,7 @@ public:
 
         rclcpp::sleep_for(3s);
 
-        // display some mgi stuff
+        // display some mgi shit
         auto planning_frame = this->move_group_interface_->getPlanningFrame();
         RCLCPP_INFO(node_->get_logger(), "Planning frame : %s", planning_frame.c_str());
 
@@ -131,13 +131,17 @@ public:
 
         callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
-        print_state_server_ = node_->create_service<example_interfaces::srv::Trigger>(
+        // servers
+        print_state_server_ = node_->create_service<std_srvs::srv::Trigger>(
             "~/print_robot_state",
             std::bind(&PickPlace::print_state, this,
                       std::placeholders::_1, std::placeholders::_2),
             rmw_qos_profile_services_default,
             callback_group_);
 
+        // prepare_tracker_ = node_->create_service<>
+        
+        // clients
         switch_controller_client_ = node_->create_client<controller_manager_msgs::srv::SwitchController>("controller_manager/switch_controller",
         rmw_qos_profile_services_default, callback_group_);
 
@@ -151,6 +155,7 @@ public:
         rmw_qos_profile_services_default,
         callback_group_);
 
+        // publishers
         std::string delta_twist_cmd_topic = servo_node_namespace_ + "/delta_twist_cmds";
         delta_twist_cmd_publisher_ = node_->create_publisher<geometry_msgs::msg::TwistStamped>(delta_twist_cmd_topic,10);
         
@@ -250,7 +255,7 @@ public:
         move_group_interface_->clearPoseTargets();
     }
 
-    void print_state(const example_interfaces::srv::Trigger::Request::SharedPtr,example_interfaces::srv::Trigger::Response::SharedPtr response){
+    void print_state(const std_srvs::srv::Trigger::Request::SharedPtr,std_srvs::srv::Trigger::Response::SharedPtr response){
         auto current_state = move_group_interface_->getCurrentState();
         (void)current_state;
         auto current_pose = move_group_interface_->getCurrentPose();
@@ -298,7 +303,7 @@ private:
     rclcpp::executors::MultiThreadedExecutor::SharedPtr executor_;
     rclcpp::executors::SingleThreadedExecutor::SharedPtr moveit_executor_;
     rclcpp::CallbackGroup::SharedPtr callback_group_;
-    rclcpp::Service<example_interfaces::srv::Trigger>::SharedPtr print_state_server_;
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_state_server_;
     rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedPtr switch_controller_client_;
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr start_servo_client_;
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr stop_servo_client_;

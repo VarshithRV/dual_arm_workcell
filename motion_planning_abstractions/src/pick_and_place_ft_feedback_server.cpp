@@ -14,7 +14,7 @@
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/point.hpp"
-#include "example_interfaces/srv/trigger.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include "motion_planning_abstractions_msgs/srv/pick.hpp"
 #include "ur_msgs/srv/set_io.hpp"
 #include "open_set_object_detection_msgs/srv/get_object_locations.hpp"
@@ -150,7 +150,7 @@ public:
 
         callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
-        print_state_server_ = node_->create_service<example_interfaces::srv::Trigger>(
+        print_state_server_ = node_->create_service<std_srvs::srv::Trigger>(
             "~/print_robot_state",
             std::bind(&PickPlace::print_state, this,
                       std::placeholders::_1, std::placeholders::_2),
@@ -584,8 +584,8 @@ public:
     }
 
     void print_state(
-        const example_interfaces::srv::Trigger::Request::SharedPtr /*request*/,
-        example_interfaces::srv::Trigger::Response::SharedPtr response)
+        const std_srvs::srv::Trigger::Request::SharedPtr /*request*/,
+        std_srvs::srv::Trigger::Response::SharedPtr response)
     {
         auto current_state = move_group_interface_->getCurrentState();
         (void)current_state;
@@ -634,7 +634,7 @@ private:
     rclcpp::executors::MultiThreadedExecutor::SharedPtr executor_;
     rclcpp::executors::SingleThreadedExecutor::SharedPtr moveit_executor_;
     rclcpp::CallbackGroup::SharedPtr callback_group_;
-    rclcpp::Service<example_interfaces::srv::Trigger>::SharedPtr print_state_server_;
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_state_server_;
     rclcpp::Service<motion_planning_abstractions_msgs::srv::Pick>::SharedPtr pick_and_place_server_;
     rclcpp::Client<ur_msgs::srv::SetIO>::SharedPtr set_io_client_;
     rclcpp::Client<open_set_object_detection_msgs::srv::GetObjectLocations>::SharedPtr get_object_locations_client_;

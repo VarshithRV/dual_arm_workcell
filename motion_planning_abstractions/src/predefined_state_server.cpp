@@ -11,7 +11,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
-#include "example_interfaces/srv/trigger.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include "moveit/robot_model_loader/robot_model_loader.h"
 #include "moveit/robot_model/robot_model.h"
 #include "moveit/robot_model/robot_model.h"
@@ -59,9 +59,9 @@ class PredefinedStateServer{
             moveit_executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
             moveit_executor_->add_node(moveit_node_);
 
-            print_state_server_ = node_->create_service<example_interfaces::srv::Trigger>("~/print_robot_state",std::bind(&PredefinedStateServer::print_state, this, std::placeholders::_1, std::placeholders::_2));
-            move_to_state_server_ = node_->create_service<example_interfaces::srv::Trigger>("~/move_to_state",std::bind(&PredefinedStateServer::move_to_joint_state, this, std::placeholders::_1, std::placeholders::_2));
-            fk_server_ = node_->create_service<example_interfaces::srv::Trigger>("~/fk",std::bind(&PredefinedStateServer::forward_kinematics, this, std::placeholders::_1, std::placeholders::_2));
+            print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",std::bind(&PredefinedStateServer::print_state, this, std::placeholders::_1, std::placeholders::_2));
+            move_to_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/move_to_state",std::bind(&PredefinedStateServer::move_to_joint_state, this, std::placeholders::_1, std::placeholders::_2));
+            fk_server_ = node_->create_service<std_srvs::srv::Trigger>("~/fk",std::bind(&PredefinedStateServer::forward_kinematics, this, std::placeholders::_1, std::placeholders::_2));
             
             RCLCPP_INFO(node_->get_logger(),"Started the tutorials node");
             
@@ -85,7 +85,7 @@ class PredefinedStateServer{
         }
 
         // joint state setpoint movement
-        void move_to_joint_state(const example_interfaces::srv::Trigger_Request::SharedPtr request, example_interfaces::srv::Trigger_Response::SharedPtr response){
+        void move_to_joint_state(const std_srvs::srv::Trigger_Request::SharedPtr request, std_srvs::srv::Trigger_Response::SharedPtr response){
             std::vector<double> group_variable_values = joint_targets_;
             move_group_interface_->setStartStateToCurrentState();
             move_group_interface_->setJointValueTarget(group_variable_values);
@@ -104,7 +104,7 @@ class PredefinedStateServer{
         }
 
         // some basic forward kinematics
-        void forward_kinematics(const example_interfaces::srv::Trigger_Request::SharedPtr request, example_interfaces::srv::Trigger_Response::SharedPtr response){
+        void forward_kinematics(const std_srvs::srv::Trigger_Request::SharedPtr request, std_srvs::srv::Trigger_Response::SharedPtr response){
             robot_model_loader::RobotModelLoader robot_model_loader(moveit_node_);
             const moveit::core::RobotModelPtr& kinematic_model = robot_model_loader.getModel();
             RCLCPP_INFO(node_->get_logger(), "Model frame: %s", kinematic_model->getModelFrame().c_str());
@@ -126,7 +126,7 @@ class PredefinedStateServer{
             RCLCPP_INFO_STREAM(node_->get_logger(), "Rotation: \n" << end_effector_state.rotation() << "\n");
         }
 
-        void print_state(const example_interfaces::srv::Trigger_Request::SharedPtr request, example_interfaces::srv::Trigger_Response::SharedPtr response){ // not working, stupid timer issue
+        void print_state(const std_srvs::srv::Trigger_Request::SharedPtr request, std_srvs::srv::Trigger_Response::SharedPtr response){ // not working, stupid timer issue
             auto current_state = move_group_interface_->getCurrentState();
             auto current_pose = move_group_interface_->getCurrentPose();
             auto current_joint_values = move_group_interface_->getCurrentJointValues();
@@ -163,9 +163,9 @@ class PredefinedStateServer{
         rclcpp::Executor::SharedPtr moveit_executor_;
         std::thread thread_;
 
-        rclcpp::Service<example_interfaces::srv::Trigger>::SharedPtr print_state_server_;
-        rclcpp::Service<example_interfaces::srv::Trigger>::SharedPtr move_to_state_server_;
-        rclcpp::Service<example_interfaces::srv::Trigger>::SharedPtr fk_server_;
+        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_state_server_;
+        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr move_to_state_server_;
+        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr fk_server_;
         std::string planning_group_;
         std::vector<double> joint_targets_;
         std::string side_;
