@@ -140,7 +140,7 @@ def launch_setup(context, *args, **kwargs):
     }
 
     # robot_description and param moveit param initialization is finished, now moveit config preparation needs to be done
-    # MoveIt Configuration
+    # moveit config stuff
     robot_description_semantic_content = Command(
         [
             PathJoinSubstitution([FindExecutable(name="xacro")]),
@@ -154,10 +154,6 @@ def launch_setup(context, *args, **kwargs):
         "robot_description_semantic": ParameterValue(value=robot_description_semantic_content,value_type=str)
     }
 
-    publish_robot_description_semantic = {
-        "publish_robot_description_semantic": _publish_robot_description_semantic
-    }
-    
     robot_description_kinematics = {
     "robot_description_kinematics": {
         "left_ur16e": {
@@ -174,67 +170,7 @@ def launch_setup(context, *args, **kwargs):
         }
     }}
 
-    robot_description_planning = {
-        "robot_description_planning": load_yaml(
-            str(moveit_config_package.perform(context)),
-            os.path.join("config", str(moveit_joint_limits_file.perform(context))),
-        )
-    }
-
-    # Planning Configuration
-    ompl_planning_pipeline_config = {
-        "move_group": {
-            "planning_plugin": "ompl_interface/OMPLPlanner",
-            "request_adapters": """default_planner_request_adapters/AddTimeOptimalParameterization default_planner_request_adapters/FixWorkspaceBounds default_planner_request_adapters/FixStartStateBounds default_planner_request_adapters/FixStartStateCollision default_planner_request_adapters/FixStartStatePathConstraints""",
-            "start_state_max_bounds_error": 0.1,
-        }
-    }
-    ompl_planning_yaml = load_yaml("dual_arm_workcell_moveit_config", "config/ompl_planning.yaml")
-    ompl_planning_pipeline_config["move_group"].update(ompl_planning_yaml)
-
-    # Trajectory Execution Configuration
-    controllers_yaml = load_yaml("dual_arm_workcell_moveit_config", "config/controllers.yaml")
-
-    # change_controllers = context.perform_substitution(use_sim_time)
-    # if change_controllers == "true":
-    #     controllers_yaml["left_scaled_joint_trajectory_controller"]["default"] = False
-    #     controllers_yaml["left_joint_trajectory_controller"]["default"] = True
-    #     controllers_yaml["right_scaled_joint_trajectory_controller"]["default"] = False
-    #     controllers_yaml["right_joint_trajectory_controller"]["default"] = True
-
-    moveit_controllers = {
-        "moveit_simple_controller_manager": controllers_yaml,
-        "moveit_controller_manager": "moveit_simple_controller_manager/MoveItSimpleControllerManager",
-    }
-
-    trajectory_execution = {
-        "moveit_manage_controllers": False,
-        "trajectory_execution.allowed_execution_duration_scaling": 1.2,
-        "trajectory_execution.allowed_goal_duration_margin": 0.5,
-        "trajectory_execution.allowed_start_tolerance": 0.01,
-        "trajectory_execution.execution_duration_monitoring": False,
-    }
-
-    planning_scene_monitor_parameters = {
-        "publish_planning_scene": True,
-        "publish_geometry_updates": True,
-        "publish_state_updates": True,
-        "publish_transforms_updates": True,
-    }
-
-    left_servo_params = {
-        "left_servo_node_main": ParameterBuilder("motion_planning_abstractions")
-        .yaml("config/left_pose_tracker.yaml")
-        .yaml("config/left_ur_servo.yaml")
-        .to_dict()
-    }
-
-    right_servo_params = {
-        "left_servo_node_main": ParameterBuilder("motion_planning_abstractions")
-        .yaml("config/right_pose_tracker.yaml")
-        .yaml("config/right_ur_servo.yaml")
-        .to_dict()
-    }
+    #### nodes
 
     left_pose_tracking_node = Node(
         package="motion_planning_abstractions",
@@ -244,15 +180,21 @@ def launch_setup(context, *args, **kwargs):
         parameters=[
             robot_description,
             robot_description_semantic,
-            publish_robot_description_semantic,
             robot_description_kinematics,
-            robot_description_planning,
-            ompl_planning_pipeline_config,
-            trajectory_execution,
-            moveit_controllers,
-            planning_scene_monitor_parameters,
             {"use_sim_time": use_sim_time},
-            left_servo_params,
+            {
+                "planning_group": "left_ur16e",
+                "arm_side": "left",
+                "endeffector_link": "left_tool0",
+                "servo_controller": "left_forward_position_controller",
+                "non_servo_controller": "left_scaled_joint_trajectory_controller",
+                "servo_node_namespace": "left_servo_node_main",
+                "P_GAIN": 1.0,
+                "I_GAIN": 0.0,
+                "D_GAIN": 1.0,
+                "K_GAIN": 1.0,
+                "max_speed": 1.0,# m/s
+            },
         ]
     )
 
@@ -414,13 +356,13 @@ def launch_setup(context, *args, **kwargs):
     )
 
     nodes_to_start = [
-        # left_pose_tracking_node,
-        rws_pick_and_place_server,
-        suction_pick_and_place_server,
-        left_preaction_server,
-        right_preaction_server,
-        left_rest_server,
-        right_rest_server,
+        left_pose_tracking_node,
+        # rws_pick_and_place_server,
+        # suction_pick_and_place_server,
+        # left_preaction_server,
+        # right_preaction_server,
+        # left_rest_server,
+        # right_rest_server,
     ]
     
     return nodes_to_start

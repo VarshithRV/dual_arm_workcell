@@ -56,10 +56,10 @@ using namespace std::chrono_literals;
 using moveit::planning_interface::MoveGroupInterface;
 
 
-class PickPlace
+class PoseTracker
 {
 public:
-    PickPlace()
+    PoseTracker()
     {
         node_ = std::make_shared<rclcpp::Node>("pose_tracker");
 
@@ -132,14 +132,25 @@ public:
         callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
         // servers
-        print_state_server_ = node_->create_service<std_srvs::srv::Trigger>(
-            "~/print_robot_state",
-            std::bind(&PickPlace::print_state, this,
-                      std::placeholders::_1, std::placeholders::_2),
+        print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",
+            std::bind(&PoseTracker::print_state, this,std::placeholders::_1, std::placeholders::_2),
             rmw_qos_profile_services_default,
-            callback_group_);
+            callback_group_
+        );
 
-        // prepare_tracker_ = node_->create_service<>
+        prepare_tracker_ = node_->create_service<std_srvs::srv::Trigger>("~/prepare_tracker",
+            std::bind(&PoseTracker::prepare_tracker_callback_,this,std::placeholders::_1,std::placeholders::_2),
+            rmw_qos_profile_services_default,
+            callback_group_
+            
+        );
+
+        unprepare_tracker_ = node_->create_service<std_srvs::srv::Trigger>("~/unprepare_tracker",
+            std::bind(&PoseTracker::unprepare_tracker_callback_,this,std::placeholders::_1,std::placeholders::_2),
+            rmw_qos_profile_services_default,
+            callback_group_
+            
+        );
         
         // clients
         switch_controller_client_ = node_->create_client<controller_manager_msgs::srv::SwitchController>("controller_manager/switch_controller",
@@ -155,6 +166,15 @@ public:
         rmw_qos_profile_services_default,
         callback_group_);
 
+        if(!switch_controller_client_->wait_for_service(3s))
+            RCLCPP_ERROR(node_->get_logger(),"Switch controller service is not connected!");
+
+        if(!start_servo_client_->wait_for_service(3s))
+            RCLCPP_ERROR(node_->get_logger(),"Switch controller service is not connected!");
+
+        if(!stop_servo_client_->wait_for_service(3s))
+            RCLCPP_ERROR(node_->get_logger(),"Switch controller service is not connected!");
+        
         // publishers
         std::string delta_twist_cmd_topic = servo_node_namespace_ + "/delta_twist_cmds";
         delta_twist_cmd_publisher_ = node_->create_publisher<geometry_msgs::msg::TwistStamped>(delta_twist_cmd_topic,10);
@@ -256,12 +276,13 @@ public:
     }
 
     void print_state(const std_srvs::srv::Trigger::Request::SharedPtr,std_srvs::srv::Trigger::Response::SharedPtr response){
+        auto endeffector = move_group_interface_->getEndEffectorLink();
+        auto planning_frame = move_group_interface_->getPlanningFrame();
         auto current_state = move_group_interface_->getCurrentState();
         (void)current_state;
         auto current_pose = move_group_interface_->getCurrentPose();
         auto current_joint_values = move_group_interface_->getCurrentJointValues();
-
-        auto print_pose = [this, current_joint_values, current_pose]()
+        auto print_pose = [this, endeffector, planning_frame, current_joint_values, current_pose]()
         {
             double x = current_pose.pose.position.x;
             double y = current_pose.pose.position.y;
@@ -271,6 +292,8 @@ public:
             double qz = current_pose.pose.orientation.z;
             double qw = current_pose.pose.orientation.w;
 
+            RCLCPP_INFO(this->node_->get_logger(), "Endeffector : %s", endeffector.c_str());
+            RCLCPP_INFO(this->node_->get_logger(), "Planning frame : %s", planning_frame.c_str());
             RCLCPP_INFO(this->node_->get_logger(), "X : %f", x);
             RCLCPP_INFO(this->node_->get_logger(), "Y : %f", y);
             RCLCPP_INFO(this->node_->get_logger(), "Z : %f", z);
@@ -285,6 +308,7 @@ public:
                 message += "Joint " + std::to_string(i) + ": " +
                            std::to_string(current_joint_values[i]) + "\n";
             }
+
             message += "X : " + std::to_string(x) +
                        " Y : " + std::to_string(y) +
                        " Z : " + std::to_string(z);
@@ -294,6 +318,45 @@ public:
         response->message = print_pose();
         response->success = true;
     }
+
+    void prepare_tracker_callback_(const std_srvs::srv::Trigger_Request::SharedPtr request, std_srvs::srv::Trigger_Response::SharedPtr response){
+        RCLCPP_INFO(node_->get_logger(),"Switching controllers to servo type controller");
+        if(switch_controller()){
+            RCLCPP_INFO(node_->get_logger(),"Done");
+            RCLCPP_INFO(node_->get_logger(),"Starting servo");
+            if(start_servo()){
+                RCLCPP_INFO(node_->get_logger(),"Done");
+                response->message = "preparation complete";
+                response->success = true;
+            }
+            else{
+                RCLCPP_ERROR(node_->get_logger(),"Error starting servo, switching back controller to non servo type");
+                if(switch_back_controller())
+                    RCLCPP_INFO(node_->get_logger(),"Done");
+                else
+                    RCLCPP_INFO(node_->get_logger(),"Error switching back controller! manually switch back controllers");
+            }
+        }
+        else
+            RCLCPP_ERROR(node_->get_logger(),"Error switching to servo type controller");
+    }
+
+    void unprepare_tracker_callback_(const std_srvs::srv::Trigger_Request::SharedPtr request, std_srvs::srv::Trigger_Response::SharedPtr response){
+        RCLCPP_INFO(node_->get_logger(),"Switching controllers to non servo type controllers");
+        if(switch_back_controller()){
+            RCLCPP_INFO(node_->get_logger(),"Done");
+            RCLCPP_INFO(node_->get_logger(),"Stopping servo");
+            if(stop_servo()){
+                RCLCPP_INFO(node_->get_logger(),"Done");
+            }
+            else{
+                RCLCPP_ERROR(node_->get_logger(),"Error stopping servo");
+            }
+        }
+        else
+            RCLCPP_ERROR(node_->get_logger(),"Error switching to non servo type controller");
+    }
+
 
 private:
     std::thread thread_;
@@ -308,6 +371,8 @@ private:
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr start_servo_client_;
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr stop_servo_client_;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr delta_twist_cmd_publisher_;
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr prepare_tracker_;
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr unprepare_tracker_;
     
     rclcpp::Clock system_clock_;
     
@@ -331,7 +396,7 @@ int main(int argc, char *argv[])
 {
     rclcpp::init(argc, argv);
 
-    auto moveit_example = PickPlace();
+    auto moveit_example = PoseTracker();
 
     rclcpp::shutdown();
     return 0;
