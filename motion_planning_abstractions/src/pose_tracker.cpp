@@ -13,6 +13,14 @@ internal methods required  :
 */
 
 /*
+external methods/ services : 
+1. prepare_tracker
+2. unprepare_tracker
+3. start_tracker
+4. stop_tracker
+*/
+
+/*
 parameters required : 
 1. PID gains
 2. planning group
@@ -22,6 +30,13 @@ parameters required :
 6. non_servo_controller
 7. servo_namespace (name of the servo node)
 9. end_effector_link
+*/
+
+/*
+The node uses a state machine with three states
+READY 0 // node state when all the prerequisites are met (the right controller and start servo), the robot should not move
+NOT_READY 1 // node state when all the prerequisites are not met (not the right controller and start servo), the robot should not move
+ACTIVE_TRACKING 2 // node state when the node is actively tracking, the robot should move until it reaches and transition to READY state
 */
 
 
@@ -62,8 +77,6 @@ parameters required :
 #define NOT_READY 1 // node state when all the prerequisites are not met (not the right controller and start servo)
 #define ACTIVE_TRACKING 2 // node state when the node is actively tracking
 
-#define ON 1
-#define OFF 0
 
 using namespace std::chrono_literals;
 using moveit::planning_interface::MoveGroupInterface;
