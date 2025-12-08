@@ -61,7 +61,8 @@ find_package(ur_msgs REQUIRED)
 # find_package(<dependency> REQUIRED)
 
 
-install(DIRECTORY launch
+install(
+  DIRECTORY launch 
   DESTINATION share/${PROJECT_NAME}
 )
 

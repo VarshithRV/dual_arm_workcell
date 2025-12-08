@@ -39,7 +39,6 @@ NOT_READY 1 // node state when all the prerequisites are not met (not the right 
 ACTIVE_TRACKING 2 // node state when the node is actively tracking, the robot should move until it reaches and transition to READY state
 */
 
-
 #include <memory>
 #include <functional>
 #include <string>
@@ -69,9 +68,11 @@ ACTIVE_TRACKING 2 // node state when the node is actively tracking, the robot sh
 #include "geometry_msgs/msg/twist.hpp"
 #include <Eigen/Geometry>
 
+#include "pid_linear_velocity.hpp"
+#include "pid_angular_velocity.hpp"
+
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-
 
 #define READY 0 // node state when all the prerequisites are met (the right controller and start servo)
 #define NOT_READY 1 // node state when all the prerequisites are not met (not the right controller and start servo)
@@ -80,84 +81,6 @@ ACTIVE_TRACKING 2 // node state when the node is actively tracking, the robot sh
 
 using namespace std::chrono_literals;
 using moveit::planning_interface::MoveGroupInterface;
-
-// PID class for linear velocity, get_velocity(vector3d target, vector3d current) should return a vector3d linear velocity
-class PIDLinearVelocity{
-    public:
-        template <class T>
-        PIDLinearVelocity(T p_gain, T i_gain, T d_gain, T k_gain, T error_velocity_iir_alpha, T frequency, T error_velocity_window_size){
-            this->P_GAIN_ = double(p_gain);
-            this->I_GAIN_ = double(i_gain);
-            this->D_GAIN_ = double(d_gain);
-            this->K_GAIN_ = double(k_gain);
-            this->error_velocity_iir_alpha_ = double(error_velocity_iir_alpha);
-            this->frequency_ = double(frequency);
-            this->error_velocity_window_size_ = error_velocity_window_size;
-
-            this->error_integral_ = {0.0,0.0,0.0};
-            this->error_velocity_ = {0.0,0.0,0.0};
-            this->count_ = 0;
-        }
-
-        Eigen::Vector3d get_velocity(Eigen::Vector3d current, Eigen::Vector3d target){ // call this function in a loop
-            Eigen::Vector3d error = target - current;
-            error_array_.push_back(error);
-            error_integral_ += error/frequency_;
-            error_velocity_ = get_error_velocity();
-            
-            std::cout<<"error : "<<error[0]<<" "<<error[1]<<" "<<error[2]<<std::endl;
-            std::cout<<"error integral : "<<error_integral_[0]<<" "<<error_integral_[1]<<" "<<error_integral_[2]<<std::endl;
-            std::cout<<"error velocity : "<<error_velocity_[0]<<" "<<error_velocity_[1]<<" "<<error_velocity_[2]<<std::endl;
-
-            auto velocity = K_GAIN_*((P_GAIN_*error) + (I_GAIN_*error_integral_) + (D_GAIN_*error_velocity_));
-            std::cout<<"Velocity : "<<velocity[0]<<" "<<velocity[1]<<" "<<velocity[2]<<std::endl;
-
-            return velocity;
-        }
-
-        Eigen::Vector3d get_error_velocity(){
-            if(error_array_.size() < this->error_velocity_window_size_){
-                return Eigen::Vector3d({0.0, 0.0, 0.0});
-            }
-            else if(error_array_.size() == this->error_velocity_window_size_){
-                error_array_.erase(error_array_.begin());
-                return (error_velocity_*(1-error_velocity_iir_alpha_)) + 
-                ((error_velocity_iir_alpha_)*(error_array_.back() - error_array_.front())*(this->frequency_/this->error_velocity_window_size_));
-            }
-            else{
-                error_array_.erase(error_array_.begin());
-                return Eigen::Vector3d({0.0,0.0,0.0});
-            }
-        }
-
-        void reset_count(){
-            this->count_ = 0;
-        }
-
-        void reset_error_integral(){
-            this->error_integral_ = {0.0,0.0,0.0};
-        }
-
-        void clear_error_array(){
-            this->error_array_.clear();
-        }
-
-    private:
-        double P_GAIN_;
-        double I_GAIN_;
-        double D_GAIN_;
-        double K_GAIN_;
-        double error_velocity_iir_alpha_; // 0 to 1, 0 means trust the unfiltered data more.
-        double frequency_;
-
-        u_int64_t count_;
-        u_int64_t error_velocity_window_size_;
-        Eigen::Vector3d error_integral_;
-        Eigen::Vector3d error_velocity_;
-
-        std::vector<Eigen::Vector3d> error_array_;
-};
-
 
 class PoseTracker
 {
@@ -544,33 +467,36 @@ public:
         
         auto target_orientation_normalized_q = target_orientation_q.normalized();
 
-        Eigen::Quaterniond orientation_error_q =  target_orientation_normalized_q * current_orientation_q.inverse();
+        // Eigen::Quaterniond orientation_error_q =  target_orientation_normalized_q * current_orientation_q.inverse();
         
-        // just p controller for now
-        auto linear_velocity = [this,linear_error_](){
-            return K_GAIN_*P_GAIN_*linear_error_;
-        }();
+        // // just p controller for now
+        // auto linear_velocity = [this,linear_error_](){
+        //     return K_GAIN_*P_GAIN_*linear_error_;
+        // }();
 
-        auto angular_velocity = [this,orientation_error_q](){
-            Eigen::AngleAxisd ungained_angular_velocity(orientation_error_q);
-            RCLCPP_INFO(node_->get_logger(),"Angle axis error : %f,%f,%f,%f",ungained_angular_velocity.angle(),ungained_angular_velocity.axis()[0],ungained_angular_velocity.axis()[1],ungained_angular_velocity.axis()[2]);
-            return K_GAIN_*P_GAIN_*ungained_angular_velocity.angle()*ungained_angular_velocity.axis();
-        }();
+        // auto angular_velocity = [this,orientation_error_q](){
+        //     Eigen::AngleAxisd ungained_angular_velocity(orientation_error_q);
+        //     RCLCPP_INFO(node_->get_logger(),"Angle axis error : %f,%f,%f,%f",ungained_angular_velocity.angle(),ungained_angular_velocity.axis()[0],ungained_angular_velocity.axis()[1],ungained_angular_velocity.axis()[2]);
+        //     return K_GAIN_*P_GAIN_*ungained_angular_velocity.angle()*ungained_angular_velocity.axis();
+        // }();
 
-        RCLCPP_INFO(node_->get_logger(),"Linear Error : %f,%f,%f",linear_error_[0],linear_error_[1],linear_error_[2]);
-        RCLCPP_INFO(node_->get_logger(),"Quaternion Error : %f,%f,%f,%f",orientation_error_q.w(),orientation_error_q.x(),orientation_error_q.y(),orientation_error_q.z());
-        RCLCPP_INFO(node_->get_logger(),"Linear velocity : %f,%f,%f",linear_velocity[0],linear_velocity[1],linear_velocity[2]);
-        RCLCPP_INFO(node_->get_logger(),"Angular velocity : %f,%f,%f",angular_velocity[0],angular_velocity[1],angular_velocity[2]);
+        // RCLCPP_INFO(node_->get_logger(),"Linear Error : %f,%f,%f",linear_error_[0],linear_error_[1],linear_error_[2]);
+        // RCLCPP_INFO(node_->get_logger(),"Quaternion Error : %f,%f,%f,%f",orientation_error_q.w(),orientation_error_q.x(),orientation_error_q.y(),orientation_error_q.z());
+        // RCLCPP_INFO(node_->get_logger(),"Linear velocity : %f,%f,%f",linear_velocity[0],linear_velocity[1],linear_velocity[2]);
+        // RCLCPP_INFO(node_->get_logger(),"Angular velocity : %f,%f,%f",angular_velocity[0],angular_velocity[1],angular_velocity[2]);
         
-        std::cout<<"Target_pose = "<<this->target_pose_<<std::endl;
-        if(this->target_pose_ == nullptr){
-            RCLCPP_INFO(node_->get_logger(),"No target pose received");
-        }
+        // std::cout<<"Target_pose = "<<this->target_pose_<<std::endl;
+        // if(this->target_pose_ == nullptr){
+        //     RCLCPP_INFO(node_->get_logger(),"No target pose received");
+        // }
 
         // test the PIDLinearVelocity
-        auto pid_interface = PIDLinearVelocity(P_GAIN_, I_GAIN_, D_GAIN_, K_GAIN_, 0.3, 50.0, 10.0);
-        size_t i = 0;
-        auto linear_velocity = pid_interface.get_velocity(current_pose_linear, target_pose_linear);
+        auto pid_linear_interface = PIDLinearVelocity(P_GAIN_, I_GAIN_, D_GAIN_, K_GAIN_, 0.3, 50.0, 10.0);
+        auto linear_velocity = pid_linear_interface.get_velocity(current_pose_linear, target_pose_linear);
+        // test the PIDAngularVelocity
+        auto pid_angular_interface = PIDAngularVelocity(P_GAIN_, I_GAIN_, D_GAIN_, K_GAIN_, 0.3, 50.0, 10.0);
+        auto angular_velocity = pid_angular_interface.get_velocity(current_orientation_q, target_orientation_q);
+
     }
 
 private:
