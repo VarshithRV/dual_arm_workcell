@@ -104,15 +104,26 @@ class PIDLinearVelocity{
             error_array_.push_back(error);
             error_integral_ += error/frequency_;
             error_velocity_ = get_error_velocity();
-            return K_GAIN_*((P_GAIN_*error) + (I_GAIN_*error_integral_) + (D_GAIN_*error_velocity_));
+            
+            std::cout<<"error : "<<error[0]<<" "<<error[1]<<" "<<error[2]<<std::endl;
+            std::cout<<"error integral : "<<error_integral_[0]<<" "<<error_integral_[1]<<" "<<error_integral_[2]<<std::endl;
+            std::cout<<"error velocity : "<<error_velocity_[0]<<" "<<error_velocity_[1]<<" "<<error_velocity_[2]<<std::endl;
+
+            auto velocity = K_GAIN_*((P_GAIN_*error) + (I_GAIN_*error_integral_) + (D_GAIN_*error_velocity_));
+            std::cout<<"Velocity : "<<velocity[0]<<" "<<velocity[1]<<" "<<velocity[2]<<std::endl;
+
+            return velocity;
         }
 
         Eigen::Vector3d get_error_velocity(){
-            if(error_array_.size() < this->error_velocity_window_size_)
+            if(error_array_.size() < this->error_velocity_window_size_){
                 return Eigen::Vector3d({0.0, 0.0, 0.0});
-            else if(error_array_.size() == this->error_velocity_window_size_)
+            }
+            else if(error_array_.size() == this->error_velocity_window_size_){
+                error_array_.erase(error_array_.begin());
                 return (error_velocity_*(1-error_velocity_iir_alpha_)) + 
                 ((error_velocity_iir_alpha_)*(error_array_.back() - error_array_.front())*(this->frequency_/this->error_velocity_window_size_));
+            }
             else{
                 error_array_.erase(error_array_.begin());
                 return Eigen::Vector3d({0.0,0.0,0.0});
@@ -521,39 +532,45 @@ public:
             for d, need to compute error velocity and need to compute velocity of the orientation error
         */
         
-        // auto current_pose = this->move_group_interface_->getCurrentPose();
+        RCLCPP_INFO(node_->get_logger(),"Started service");
+        auto current_pose = this->move_group_interface_->getCurrentPose();
         
-        // Eigen::Vector3d current_linear = {current_pose.pose.position.x,current_pose.pose.position.y,current_pose.pose.position.z};
-        // Eigen::Vector3d target_pose_linear = {target_pose_.position.x,target_pose_.position.y,target_pose_.position.z};
-        // Eigen::Vector3d linear_error_ = target_pose_linear - current_linear;
+        Eigen::Vector3d current_pose_linear = {current_pose.pose.position.x,current_pose.pose.position.y,current_pose.pose.position.z};
+        Eigen::Vector3d target_pose_linear = {target_pose_->position.x,target_pose_->position.y,target_pose_->position.z};
+        Eigen::Vector3d linear_error_ = target_pose_linear - current_pose_linear;
 
-        // Eigen::Quaterniond current_orientation_q = {current_pose.pose.orientation.w, current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z};
-        // Eigen::Quaterniond target_orientation_q = {target_pose_.orientation.w, target_pose_.orientation.x, target_pose_.orientation.y, target_pose_.orientation.z};
+        Eigen::Quaterniond current_orientation_q = {current_pose.pose.orientation.w, current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z};
+        Eigen::Quaterniond target_orientation_q = {target_pose_->orientation.w, target_pose_->orientation.x, target_pose_->orientation.y, target_pose_->orientation.z};
         
-        // auto target_orientation_normalized_q = target_orientation_q.normalized();
+        auto target_orientation_normalized_q = target_orientation_q.normalized();
 
-        // Eigen::Quaterniond orientation_error_q =  target_orientation_normalized_q * current_orientation_q.inverse();
+        Eigen::Quaterniond orientation_error_q =  target_orientation_normalized_q * current_orientation_q.inverse();
         
-        // // just p controller for now
-        // auto linear_velocity = [this,linear_error_](){
-        //     return K_GAIN_*P_GAIN_*linear_error_;
-        // }();
+        // just p controller for now
+        auto linear_velocity = [this,linear_error_](){
+            return K_GAIN_*P_GAIN_*linear_error_;
+        }();
 
-        // auto angular_velocity = [this,orientation_error_q](){
-        //     Eigen::AngleAxisd ungained_angular_velocity(orientation_error_q);
-        //     RCLCPP_INFO(node_->get_logger(),"Angle axis error : %f,%f,%f,%f",ungained_angular_velocity.angle(),ungained_angular_velocity.axis()[0],ungained_angular_velocity.axis()[1],ungained_angular_velocity.axis()[2]);
-        //     return K_GAIN_*P_GAIN_*ungained_angular_velocity.angle()*ungained_angular_velocity.axis();
-        // }();
+        auto angular_velocity = [this,orientation_error_q](){
+            Eigen::AngleAxisd ungained_angular_velocity(orientation_error_q);
+            RCLCPP_INFO(node_->get_logger(),"Angle axis error : %f,%f,%f,%f",ungained_angular_velocity.angle(),ungained_angular_velocity.axis()[0],ungained_angular_velocity.axis()[1],ungained_angular_velocity.axis()[2]);
+            return K_GAIN_*P_GAIN_*ungained_angular_velocity.angle()*ungained_angular_velocity.axis();
+        }();
 
-        // RCLCPP_INFO(node_->get_logger(),"Linear Error : %f,%f,%f",linear_error_[0],linear_error_[1],linear_error_[2]);
-        // RCLCPP_INFO(node_->get_logger(),"Quaternion Error : %f,%f,%f,%f",orientation_error_q.w(),orientation_error_q.x(),orientation_error_q.y(),orientation_error_q.z());
-        // RCLCPP_INFO(node_->get_logger(),"Linear velocity : %f,%f,%f",linear_velocity[0],linear_velocity[1],linear_velocity[2]);
-        // RCLCPP_INFO(node_->get_logger(),"Angular velocity : %f,%f,%f",angular_velocity[0],angular_velocity[1],angular_velocity[2]);
+        RCLCPP_INFO(node_->get_logger(),"Linear Error : %f,%f,%f",linear_error_[0],linear_error_[1],linear_error_[2]);
+        RCLCPP_INFO(node_->get_logger(),"Quaternion Error : %f,%f,%f,%f",orientation_error_q.w(),orientation_error_q.x(),orientation_error_q.y(),orientation_error_q.z());
+        RCLCPP_INFO(node_->get_logger(),"Linear velocity : %f,%f,%f",linear_velocity[0],linear_velocity[1],linear_velocity[2]);
+        RCLCPP_INFO(node_->get_logger(),"Angular velocity : %f,%f,%f",angular_velocity[0],angular_velocity[1],angular_velocity[2]);
         
         std::cout<<"Target_pose = "<<this->target_pose_<<std::endl;
         if(this->target_pose_ == nullptr){
             RCLCPP_INFO(node_->get_logger(),"No target pose received");
         }
+
+        // test the PIDLinearVelocity
+        auto pid_interface = PIDLinearVelocity(P_GAIN_, I_GAIN_, D_GAIN_, K_GAIN_, 0.3, 50.0, 10.0);
+        size_t i = 0;
+        auto linear_velocity = pid_interface.get_velocity(current_pose_linear, target_pose_linear);
     }
 
 private:
