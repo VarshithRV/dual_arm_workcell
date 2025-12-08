@@ -123,6 +123,10 @@ public:
         angular_stop_threshold_ = node_->get_parameter("angular_stop_threshold").as_double();
         target_pose_timeout_ = node_->get_parameter("target_pose_timeout").as_double();
 
+        // pid linear and angular interfaces
+        pid_linear_velocity_interface_ = PIDLinearVelocity(P_GAIN_, I_GAIN_, D_GAIN_, K_GAIN_, 0.3, 50.0, 10.0);
+        pid_angular_velocity_interface_ = PIDAngularVelocity(P_GAIN_, I_GAIN_, D_GAIN_, K_GAIN_, 0.3, 50.0, 10.0);
+
         // move group interface setup
         rclcpp::NodeOptions node_options;
         node_options.automatically_declare_parameters_from_overrides(true);
@@ -234,6 +238,9 @@ public:
             10,
             std::bind(&PoseTracker::target_pose_callback_,this,std::placeholders::_1)
         );
+
+        // timers
+        control_loop_timer_ = node_->create_wall_timer(20ms,[this](){control_loop_();});
 
         thread_ = std::thread([this](){moveit_executor_->spin();});
         executor_->spin();
@@ -440,14 +447,6 @@ public:
     }
 
     void track_target_pose_(const std_srvs::srv::Trigger_Request::SharedPtr request, std_srvs::srv::Trigger_Response::SharedPtr response){
-        // here we use the input target pose and control the end effector to publish the velocity to control
-        // linear_velocity = PID(target_pose.linear - current_pose.linear)
-        // rotation_velocity = PID(target_pose.orientation,current_pose.orientation) 
-        
-        /*
-            minimally need to calculate the linear and rotational error, linear and rotational velocity of the error
-        */
-        
         /*
             currently using a service to test stuff
             need to add a watchdog timer to the target 
@@ -467,29 +466,6 @@ public:
         
         auto target_orientation_normalized_q = target_orientation_q.normalized();
 
-        // Eigen::Quaterniond orientation_error_q =  target_orientation_normalized_q * current_orientation_q.inverse();
-        
-        // // just p controller for now
-        // auto linear_velocity = [this,linear_error_](){
-        //     return K_GAIN_*P_GAIN_*linear_error_;
-        // }();
-
-        // auto angular_velocity = [this,orientation_error_q](){
-        //     Eigen::AngleAxisd ungained_angular_velocity(orientation_error_q);
-        //     RCLCPP_INFO(node_->get_logger(),"Angle axis error : %f,%f,%f,%f",ungained_angular_velocity.angle(),ungained_angular_velocity.axis()[0],ungained_angular_velocity.axis()[1],ungained_angular_velocity.axis()[2]);
-        //     return K_GAIN_*P_GAIN_*ungained_angular_velocity.angle()*ungained_angular_velocity.axis();
-        // }();
-
-        // RCLCPP_INFO(node_->get_logger(),"Linear Error : %f,%f,%f",linear_error_[0],linear_error_[1],linear_error_[2]);
-        // RCLCPP_INFO(node_->get_logger(),"Quaternion Error : %f,%f,%f,%f",orientation_error_q.w(),orientation_error_q.x(),orientation_error_q.y(),orientation_error_q.z());
-        // RCLCPP_INFO(node_->get_logger(),"Linear velocity : %f,%f,%f",linear_velocity[0],linear_velocity[1],linear_velocity[2]);
-        // RCLCPP_INFO(node_->get_logger(),"Angular velocity : %f,%f,%f",angular_velocity[0],angular_velocity[1],angular_velocity[2]);
-        
-        // std::cout<<"Target_pose = "<<this->target_pose_<<std::endl;
-        // if(this->target_pose_ == nullptr){
-        //     RCLCPP_INFO(node_->get_logger(),"No target pose received");
-        // }
-
         // test the PIDLinearVelocity
         auto pid_linear_interface = PIDLinearVelocity(P_GAIN_, I_GAIN_, D_GAIN_, K_GAIN_, 0.3, 50.0, 10.0);
         auto linear_velocity = pid_linear_interface.get_velocity(current_pose_linear, target_pose_linear);
@@ -499,9 +475,48 @@ public:
 
     }
 
+    void control_loop_(){
+        if(current_state_ == ACTIVE_TRACKING and target_pose_ != nullptr){
+            auto current_pose = this->move_group_interface_->getCurrentPose();
+            
+            Eigen::Vector3d current_pose_linear = {current_pose.pose.position.x,current_pose.pose.position.y,current_pose.pose.position.z};
+            Eigen::Vector3d target_pose_linear = {target_pose_->position.x,target_pose_->position.y,target_pose_->position.z};
+            Eigen::Vector3d linear_error_ = target_pose_linear - current_pose_linear;
+
+            Eigen::Quaterniond current_orientation_q = {current_pose.pose.orientation.w, current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z};
+            Eigen::Quaterniond target_orientation_q = {target_pose_->orientation.w, target_pose_->orientation.x, target_pose_->orientation.y, target_pose_->orientation.z};
+            
+            auto target_orientation_normalized_q = target_orientation_q.normalized();
+            auto orientation_error = target_orientation_q*current_orientation_q.inverse();
+
+            if(linear_error_.norm()<this->linear_stop_threshold_ and orientation_error.norm()<this->angular_stop_threshold_)
+                return;
+
+            // get the PIDLinearVelocity
+            auto pid_linear_interface = PIDLinearVelocity(P_GAIN_, I_GAIN_, D_GAIN_, K_GAIN_, 0.3, 50.0, 10.0);
+            auto linear_velocity = pid_linear_interface.get_velocity(current_pose_linear, target_pose_linear);
+            
+            // get the PIDAngularVelocity
+            auto pid_angular_interface = PIDAngularVelocity(P_GAIN_, I_GAIN_, D_GAIN_, K_GAIN_, 0.3, 50.0, 10.0);
+            auto angular_velocity = pid_angular_interface.get_velocity(current_orientation_q, target_orientation_q);
+            
+            current_velocity_cmd_.header.frame_id = "";
+            current_velocity_cmd_.header.stamp = node_->now();
+            current_velocity_cmd_.twist.linear.x = linear_velocity[0];
+            current_velocity_cmd_.twist.linear.y = linear_velocity[1];
+            current_velocity_cmd_.twist.linear.z = linear_velocity[2];
+            current_velocity_cmd_.twist.angular.x = angular_velocity[0];
+            current_velocity_cmd_.twist.angular.y = angular_velocity[1];
+            current_velocity_cmd_.twist.angular.z = angular_velocity[2];
+
+            this->delta_twist_cmd_publisher_->publish(current_velocity_cmd_);
+        }
+    }
+
 private:
     std::thread thread_;
-    std::shared_ptr<MoveGroupInterface> move_group_interface_;
+    
+    
     rclcpp::Node::SharedPtr node_;
     rclcpp::Node::SharedPtr moveit_node_;
     rclcpp::executors::MultiThreadedExecutor::SharedPtr executor_;
@@ -517,8 +532,14 @@ private:
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr start_tracker_;
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr stop_tracker_;
     rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr target_pose_subscription_;
+    rclcpp::TimerBase::SharedPtr control_loop_timer_;
     
+    std::shared_ptr<MoveGroupInterface> move_group_interface_;
+    PIDLinearVelocity pid_linear_velocity_interface_;
+    PIDAngularVelocity pid_angular_velocity_interface_;
+
     geometry_msgs::msg::Pose::SharedPtr target_pose_ ;
+    geometry_msgs::msg::TwistStamped current_velocity_cmd_;
 
     rclcpp::Clock system_clock_;
     
