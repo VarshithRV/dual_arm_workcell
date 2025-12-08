@@ -33,9 +33,7 @@ class PIDAngularVelocity{
         Eigen::Vector3d get_velocity(Eigen::Quaterniond current, Eigen::Quaterniond target){ // call this function in a loop            
             Eigen::Quaterniond error = target*current.inverse();
             Eigen::AngleAxisd error_angle_axis(error);
-            std::cout<<"Error : "<<error.w()<<" "<<error.x()<<" "<<error.y()<<" "<<error.z()<<std::endl;
             auto angular_velocity = (K_GAIN_*P_GAIN_*error_angle_axis.angle())*error_angle_axis.axis();
-            std::cout<<"Angular velocity : "<<" "<<angular_velocity[0]<<" "<<angular_velocity[1]<<" "<<angular_velocity[2]<<std::endl;
             return angular_velocity;
         }
 

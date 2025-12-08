@@ -34,8 +34,8 @@ parameters required :
 
 /*
 The node uses a state machine with three states
-READY 0 // node state when all the prerequisites are met (the right controller and start servo), the robot should not move
-NOT_READY 1 // node state when all the prerequisites are not met (not the right controller and start servo), the robot should not move
+NOT_READY 0 // node state when all the prerequisites are not met (not the right controller and start servo), the robot should not move
+READY 1 // node state when all the prerequisites are met (the right controller and start servo), the robot should not move
 ACTIVE_TRACKING 2 // node state when the node is actively tracking, the robot should move until it reaches and transition to READY state
 */
 
@@ -55,6 +55,7 @@ ACTIVE_TRACKING 2 // node state when the node is actively tracking, the robot sh
 #include "geometry_msgs/msg/point.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include "std_srvs/srv/set_bool.hpp"
+#include "std_msgs/msg/int16.hpp"
 #include "motion_planning_abstractions_msgs/srv/pick.hpp"
 #include "ur_msgs/srv/set_io.hpp"
 #include "open_set_object_detection_msgs/srv/get_object_locations.hpp"
@@ -74,8 +75,8 @@ ACTIVE_TRACKING 2 // node state when the node is actively tracking, the robot sh
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
-#define READY 0 // node state when all the prerequisites are met (the right controller and start servo)
-#define NOT_READY 1 // node state when all the prerequisites are not met (not the right controller and start servo)
+#define NOT_READY 0 // node state when all the prerequisites are not met (not the right controller and start servo)
+#define READY 1 // node state when all the prerequisites are met (the right controller and start servo)
 #define ACTIVE_TRACKING 2 // node state when the node is actively tracking
 
 
@@ -186,13 +187,13 @@ public:
             callback_group_
         );
         
-        start_tracker_ = node_->create_service<std_srvs::srv::SetBool>("~/start_tracker",
+        start_tracker_ = node_->create_service<std_srvs::srv::Trigger>("~/start_tracker",
             std::bind(&PoseTracker::start_tracker_callback_,this,std::placeholders::_1,std::placeholders::_2),
             rmw_qos_profile_services_default,
             callback_group_
         );
 
-        stop_tracker_ = node_->create_service<std_srvs::srv::SetBool>("~/stop_tracker",
+        stop_tracker_ = node_->create_service<std_srvs::srv::Trigger>("~/stop_tracker",
             std::bind(&PoseTracker::stop_tracker_callback_,this,std::placeholders::_1,std::placeholders::_2),
             rmw_qos_profile_services_default,
             callback_group_
@@ -232,6 +233,7 @@ public:
         // publishers
         std::string delta_twist_cmd_topic = servo_node_namespace_ + "/delta_twist_cmds";
         delta_twist_cmd_publisher_ = node_->create_publisher<geometry_msgs::msg::TwistStamped>(delta_twist_cmd_topic,10);
+        tracker_status_publisher_ = node_->create_publisher<std_msgs::msg::Int16>("~/tracker_status",10);
         
         // subscribers
         target_pose_subscription_ = node_->create_subscription<geometry_msgs::msg::Pose>("~/target_pose",
@@ -241,6 +243,14 @@ public:
 
         // timers
         control_loop_timer_ = node_->create_wall_timer(20ms,[this](){control_loop_();});
+        target_pose_watchdog_timer_ = node_->create_wall_timer(20ms,[this](){target_pose_watchdog_timer_callback_();});
+        publish_tracker_status_timer_ = node_->create_wall_timer(100ms,
+            [this](){
+                auto msg = std_msgs::msg::Int16(); 
+                msg.data=current_state_; 
+                tracker_status_publisher_->publish(msg);
+            }
+        );
 
         thread_ = std::thread([this](){moveit_executor_->spin();});
         executor_->spin();
@@ -424,26 +434,45 @@ public:
             RCLCPP_ERROR(node_->get_logger(),"Error switching to non servo type controller");
     }
 
-    void start_tracker_callback_(const std_srvs::srv::SetBool_Request::SharedPtr request, std_srvs::srv::SetBool_Response::SharedPtr response){
+    void start_tracker_callback_(const std_srvs::srv::Trigger_Request::SharedPtr request, std_srvs::srv::Trigger_Response::SharedPtr response){
         if(node_->now().seconds() - last_message_time_ > target_pose_timeout_ || target_pose_ == nullptr){
             RCLCPP_ERROR(node_->get_logger(),"The last message not received or timed out");
             response->success = false;
-            current_state_ = READY;
             return;
         }
-        current_state_ = ACTIVE_TRACKING;
+        if(current_state_==ACTIVE_TRACKING){
+            RCLCPP_INFO(node_->get_logger(),"State is already in active tracking");
+        }
+        if(current_state_==READY){
+            current_state_ = ACTIVE_TRACKING;
+            RCLCPP_INFO(node_->get_logger(),"State is in active tracking");
+        }
         response->success = true;
         return;
     }
 
-    void stop_tracker_callback_(const std_srvs::srv::SetBool_Request::SharedPtr request, std_srvs::srv::SetBool_Response::SharedPtr response){
-        current_state_ = READY; // no condition, just stop the robot
-        response->success = true;
+    void stop_tracker_callback_(const std_srvs::srv::Trigger_Request::SharedPtr request, std_srvs::srv::Trigger_Response::SharedPtr response){
+        if(current_state_ == ACTIVE_TRACKING){
+            current_state_ = READY; // no condition, just stop the robot
+            RCLCPP_INFO(node_->get_logger(),"Stopped actively tracking");
+            response->success = true;
+        }
+        else{
+            RCLCPP_INFO(node_->get_logger(),"The node is not actively tracking");
+            response->success = true;
+        }
     }
 
     void target_pose_callback_(const geometry_msgs::msg::Pose::SharedPtr msg){
         this->target_pose_ = msg;
         last_message_time_ = node_->now().seconds();
+    }
+
+    void target_pose_watchdog_timer_callback_(){
+        if(node_->now().seconds() - last_message_time_ > target_pose_timeout_ && current_state_==ACTIVE_TRACKING){
+            current_state_ = READY;
+            RCLCPP_ERROR(node_->get_logger(),"Target pose timed out");
+        }
     }
 
     void track_target_pose_(const std_srvs::srv::Trigger_Request::SharedPtr request, std_srvs::srv::Trigger_Response::SharedPtr response){
@@ -489,8 +518,11 @@ public:
             auto target_orientation_normalized_q = target_orientation_q.normalized();
             auto orientation_error = target_orientation_q*current_orientation_q.inverse();
 
-            if(linear_error_.norm()<this->linear_stop_threshold_ and orientation_error.norm()<this->angular_stop_threshold_)
+            if(linear_error_.norm()<this->linear_stop_threshold_ and orientation_error.norm()<this->angular_stop_threshold_){
+                RCLCPP_INFO(node_->get_logger(),"finished tracking this pose");
+                current_state_ = READY;
                 return;
+            }
 
             // get the PIDLinearVelocity
             auto pid_linear_interface = PIDLinearVelocity(P_GAIN_, I_GAIN_, D_GAIN_, K_GAIN_, 0.3, 50.0, 10.0);
@@ -527,12 +559,15 @@ private:
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr start_servo_client_;
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr stop_servo_client_;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr delta_twist_cmd_publisher_;
+    rclcpp::Publisher<std_msgs::msg::Int16>::SharedPtr tracker_status_publisher_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr prepare_tracker_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr unprepare_tracker_;
-    rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr start_tracker_;
-    rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr stop_tracker_;
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr start_tracker_;
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr stop_tracker_;
     rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr target_pose_subscription_;
     rclcpp::TimerBase::SharedPtr control_loop_timer_;
+    rclcpp::TimerBase::SharedPtr target_pose_watchdog_timer_;
+    rclcpp::TimerBase::SharedPtr publish_tracker_status_timer_;
     
     std::shared_ptr<MoveGroupInterface> move_group_interface_;
     PIDLinearVelocity pid_linear_velocity_interface_;
