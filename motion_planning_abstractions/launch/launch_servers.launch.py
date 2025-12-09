@@ -196,6 +196,8 @@ def launch_setup(context, *args, **kwargs):
                 "max_speed": 1.0,# m/s
                 "linear_stop_threshold": 0.01, #m
                 "angular_stop_threshold": 0.01, #rad
+                "planning_frame":"world",
+                "servo_frame":"left_base_link",
             },
         ]
     )

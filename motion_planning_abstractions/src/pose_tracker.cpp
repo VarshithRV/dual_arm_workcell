@@ -184,11 +184,14 @@ public:
             geometry_msgs::msg::TransformStamped t;
             try{
                 t = tf_buffer_->lookupTransform(
-                    planning_frame_, servo_frame_ ,tf2::TimePointZero
+                    servo_frame_, planning_frame_ ,tf2::TimePointZero
                 );
-                RCLCPP_INFO(node_->get_logger(),"Acquired transform between planning frame to servo frame");
             }catch(const tf2::TransformException &ex){
                 RCLCPP_INFO(node_->get_logger(),"Could not get transform between planning frame to servo frame due to exception : %s",ex.what());
+                t.transform.rotation.w = 0.0;
+                t.transform.rotation.x = 0.0;
+                t.transform.rotation.y = 0.707;
+                t.transform.rotation.z = 0.707;
             }
             planning_frame_to_servo_frame_transform_ = std::make_shared<geometry_msgs::msg::TransformStamped>(t);
             RCLCPP_INFO(node_->get_logger(),"Acquired rotation between planning_frame and servo_frame(wxyz): %f, %f, %f, %f",planning_frame_to_servo_frame_transform_->transform.rotation.w,
@@ -196,12 +199,6 @@ public:
             std::this_thread::sleep_for(50ms);
             attempts++;
         }
-        ///////////////////// the tf call isn't getting, doens't recognize the string world, wtf
-        planning_frame_to_servo_frame_transform_->transform.rotation.w = 0.0;
-        planning_frame_to_servo_frame_transform_->transform.rotation.x = 0.0;
-        planning_frame_to_servo_frame_transform_->transform.rotation.y = 0.707;
-        planning_frame_to_servo_frame_transform_->transform.rotation.z = 0.707;
-        ///////////////////////////////////////////////////////////
 
         // servers
         print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",
@@ -260,10 +257,10 @@ public:
             RCLCPP_ERROR(node_->get_logger(),"Switch controller service is not connected!");
 
         if(!start_servo_client_->wait_for_service(3s))
-            RCLCPP_ERROR(node_->get_logger(),"Switch controller service is not connected!");
+            RCLCPP_ERROR(node_->get_logger(),"Start servo service is not connected!");
 
         if(!stop_servo_client_->wait_for_service(3s))
-            RCLCPP_ERROR(node_->get_logger(),"Switch controller service is not connected!");
+            RCLCPP_ERROR(node_->get_logger(),"Stop servo service is not connected!");
         
         // publishers
         std::string delta_twist_cmd_topic = servo_node_namespace_ + "/delta_twist_cmds";
@@ -598,12 +595,9 @@ public:
             current_velocity_cmd_.twist.linear.x = rotated_linear_velocity.x();
             current_velocity_cmd_.twist.linear.y = rotated_linear_velocity.y();
             current_velocity_cmd_.twist.linear.z = rotated_linear_velocity.z();
-            // current_velocity_cmd_.twist.angular.x = rotated_angular_velocity.x();
-            // current_velocity_cmd_.twist.angular.y = rotated_angular_velocity.y();
-            // current_velocity_cmd_.twist.angular.z = rotated_angular_velocity.z();
-            current_velocity_cmd_.twist.angular.x = 0.0;
-            current_velocity_cmd_.twist.angular.y = 0.0;
-            current_velocity_cmd_.twist.angular.z = 0.0;
+            current_velocity_cmd_.twist.angular.x = rotated_angular_velocity.x();
+            current_velocity_cmd_.twist.angular.y = rotated_angular_velocity.y();
+            current_velocity_cmd_.twist.angular.z = rotated_angular_velocity.z();
             this->delta_twist_cmd_publisher_->publish(current_velocity_cmd_);
         }
     }

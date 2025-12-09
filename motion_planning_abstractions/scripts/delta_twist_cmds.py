@@ -11,7 +11,7 @@ class ServoTwistPublisher(Node):
 
         self.pub = self.create_publisher(
             TwistStamped,
-            "/left_servo_node_main/delta_twist_cmds",
+            "/servo_node/delta_twist_cmds",
             10
         )
 
@@ -21,13 +21,13 @@ class ServoTwistPublisher(Node):
     def timer_callback(self):
         msg = TwistStamped()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = "world"     # change if needed
+        msg.header.frame_id = "base_link"     # change if needed
 
         # ----- example twist command -----
         # linear velocity
         msg.twist.linear.x = 0.0
-        msg.twist.linear.y = 0.01
-        msg.twist.linear.z = 0.0
+        msg.twist.linear.y = 0.0
+        msg.twist.linear.z = 0.01
 
         # angular velocity
         msg.twist.angular.x = 0.0
