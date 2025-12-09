@@ -21,13 +21,13 @@ class ServoTwistPublisher(Node):
     def timer_callback(self):
         msg = TwistStamped()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = "left_tool0"     # change if needed
+        msg.header.frame_id = "world"     # change if needed
 
         # ----- example twist command -----
         # linear velocity
         msg.twist.linear.x = 0.0
-        msg.twist.linear.y = 0.0
-        msg.twist.linear.z = 0.05
+        msg.twist.linear.y = 0.01
+        msg.twist.linear.z = 0.0
 
         # angular velocity
         msg.twist.angular.x = 0.0

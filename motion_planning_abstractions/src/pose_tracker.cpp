@@ -52,6 +52,7 @@ ACTIVE_TRACKING 2 // node state when the node is actively tracking, the robot sh
 #include "rclcpp/executors/multi_threaded_executor.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
 #include "geometry_msgs/msg/point.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include "std_srvs/srv/set_bool.hpp"
@@ -74,6 +75,9 @@ ACTIVE_TRACKING 2 // node state when the node is actively tracking, the robot sh
 
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include "tf2/exceptions.hpp"
+#include "tf2_ros/transform_listener.h"
+#include "tf2_ros/buffer.h"
 
 #define NOT_READY 0 // node state when all the prerequisites are not met (not the right controller and start servo)
 #define READY 1 // node state when all the prerequisites are met (the right controller and start servo)
@@ -97,6 +101,8 @@ public:
         node_->declare_parameter<std::string>("servo_controller", "left_forward_position_controller");
         node_->declare_parameter<std::string>("non_servo_controller", "left_scaled_joint_trajectory_controller");
         node_->declare_parameter<std::string>("servo_node_namespace", "left_servo_node_main");
+        node_->declare_parameter<std::string>("planning_frame", "world");
+        node_->declare_parameter<std::string>("servo_frame", "left_base_link");
 
         node_->declare_parameter<double>("P_GAIN", 1.0);
         node_->declare_parameter<double>("I_GAIN", 1.0);
@@ -114,6 +120,8 @@ public:
         servo_controller_ = node_->get_parameter("servo_controller").as_string();
         non_servo_controller_ = node_->get_parameter("non_servo_controller").as_string();
         servo_node_namespace_ = node_->get_parameter("servo_node_namespace").as_string();
+        planning_frame_ = node_->get_parameter("planning_frame").as_string();
+        servo_frame_ = node_->get_parameter("servo_frame").as_string();
 
         P_GAIN_ = node_->get_parameter("P_GAIN").as_double();
         I_GAIN_ = node_->get_parameter("I_GAIN").as_double();
@@ -167,6 +175,20 @@ public:
                     current_pose.pose.position.z);
 
         callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+
+        // need to get the rotation transform from world to left_base_link
+        auto tf_buffer_ = std::make_unique<tf2_ros::Buffer>(node_->get_clock());
+        auto tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+        geometry_msgs::msg::TransformStamped t;
+        try{
+            t = tf_buffer_->lookupTransform(
+                servo_frame_, planning_frame_,tf2::TimePointZero
+            );
+            RCLCPP_INFO(node_->get_logger(),"Acquired transform between planning frame to servo frame");
+        }catch(const tf2::TransformException &ex){
+            RCLCPP_INFO(node_->get_logger(),"Could not get transform between planning frame to servo frame due to exception : %s",ex.what());
+        }
+        planning_frame_to_servo_frame_transform_ = std::make_shared<geometry_msgs::msg::TransformStamped>(t);
 
         // servers
         print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",
@@ -284,8 +306,8 @@ public:
     bool switch_back_controller(){
         RCLCPP_INFO(node_->get_logger(),"Switching back controller");
         auto request = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
-        request->activate_controllers = std::vector<std::string>{servo_controller_};
-        request->deactivate_controllers = std::vector<std::string>{non_servo_controller_};
+        request->activate_controllers = std::vector<std::string>{non_servo_controller_};
+        request->deactivate_controllers = std::vector<std::string>{servo_controller_};
         request->strictness = request->BEST_EFFORT;
 
         auto future = switch_controller_client_->async_send_request(request);
@@ -447,6 +469,10 @@ public:
             current_state_ = ACTIVE_TRACKING;
             RCLCPP_INFO(node_->get_logger(),"State is in active tracking");
         }
+        if(current_state_==NOT_READY){
+            RCLCPP_INFO(node_->get_logger(),"Not ready to track");
+            return;
+        }
         response->success = true;
         return;
     }
@@ -505,6 +531,7 @@ public:
     }
 
     void control_loop_(){
+        
         if(current_state_ == ACTIVE_TRACKING and target_pose_ != nullptr){
             auto current_pose = this->move_group_interface_->getCurrentPose();
             
@@ -512,34 +539,53 @@ public:
             Eigen::Vector3d target_pose_linear = {target_pose_->position.x,target_pose_->position.y,target_pose_->position.z};
             Eigen::Vector3d linear_error_ = target_pose_linear - current_pose_linear;
 
+            
             Eigen::Quaterniond current_orientation_q = {current_pose.pose.orientation.w, current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z};
             Eigen::Quaterniond target_orientation_q = {target_pose_->orientation.w, target_pose_->orientation.x, target_pose_->orientation.y, target_pose_->orientation.z};
             
             auto target_orientation_normalized_q = target_orientation_q.normalized();
             auto orientation_error = target_orientation_q*current_orientation_q.inverse();
-
-            if(linear_error_.norm()<this->linear_stop_threshold_ and orientation_error.norm()<this->angular_stop_threshold_){
+            
+            if(linear_error_.norm()<linear_stop_threshold_ && std::abs(1.0-(orientation_error.norm()))<angular_stop_threshold_){
                 RCLCPP_INFO(node_->get_logger(),"finished tracking this pose");
                 current_state_ = READY;
                 return;
             }
-
+            
             // get the PIDLinearVelocity
-            auto pid_linear_interface = PIDLinearVelocity(P_GAIN_, I_GAIN_, D_GAIN_, K_GAIN_, 0.3, 50.0, 10.0);
-            auto linear_velocity = pid_linear_interface.get_velocity(current_pose_linear, target_pose_linear);
+            auto linear_velocity = pid_linear_velocity_interface_.get_velocity(current_pose_linear, target_pose_linear);
             
             // get the PIDAngularVelocity
-            auto pid_angular_interface = PIDAngularVelocity(P_GAIN_, I_GAIN_, D_GAIN_, K_GAIN_, 0.3, 50.0, 10.0);
-            auto angular_velocity = pid_angular_interface.get_velocity(current_orientation_q, target_orientation_q);
+            auto angular_velocity = pid_angular_velocity_interface_.get_velocity(current_orientation_q, target_orientation_q);
             
-            current_velocity_cmd_.header.frame_id = "";
+            // testing tag
+            RCLCPP_INFO(node_->get_logger(),"Current pose : %f, %f, %f",current_pose.pose.position.x,current_pose.pose.position.y,current_pose.pose.position.z);
+            RCLCPP_INFO(node_->get_logger(),"Current pose linear : %f, %f, %f",current_pose_linear[0],current_pose_linear[1],current_pose_linear[2]);
+            RCLCPP_INFO(node_->get_logger(),"Target pose linear : %f, %f, %f",target_pose_linear[0],target_pose_linear[1],target_pose_linear[2]);
+            RCLCPP_INFO(node_->get_logger(),"Error : %f, %f, %f",linear_error_[0],linear_error_[1],linear_error_[2]);
+            RCLCPP_INFO(node_->get_logger(),"linear_velocity : %f, %f, %f",linear_velocity[0],linear_velocity[1],linear_velocity[2]);
+            RCLCPP_INFO(node_->get_logger(),"Linear error norm : %f",linear_error_.norm());
+            RCLCPP_INFO(node_->get_logger(),"Orientation error norm : %f",(1-orientation_error.norm()));
+            
+            // this is in the world frame, need to get the stuff wrt servo frame
+            Eigen::Quaterniond transform_rotation = {planning_frame_to_servo_frame_transform_->transform.rotation.w,planning_frame_to_servo_frame_transform_->transform.rotation.x,
+                planning_frame_to_servo_frame_transform_->transform.rotation.y,planning_frame_to_servo_frame_transform_->transform.rotation.z
+            };
+
+            Eigen::Quaterniond translation_q(0.0,linear_velocity.x(),linear_velocity.y(),linear_velocity.z());
+            Eigen::Quaterniond omega_q(0.0,angular_velocity.x(),angular_velocity.y(),angular_velocity.z());
+
+            Eigen::Quaterniond rotated_linear_velocity = transform_rotation * translation_q * transform_rotation.inverse();
+            Eigen::Quaterniond rotated_angular_velocity = transform_rotation * omega_q * transform_rotation.inverse();
+
+            current_velocity_cmd_.header.frame_id = servo_frame_;
             current_velocity_cmd_.header.stamp = node_->now();
-            current_velocity_cmd_.twist.linear.x = linear_velocity[0];
-            current_velocity_cmd_.twist.linear.y = linear_velocity[1];
-            current_velocity_cmd_.twist.linear.z = linear_velocity[2];
-            current_velocity_cmd_.twist.angular.x = angular_velocity[0];
-            current_velocity_cmd_.twist.angular.y = angular_velocity[1];
-            current_velocity_cmd_.twist.angular.z = angular_velocity[2];
+            current_velocity_cmd_.twist.linear.x = rotated_linear_velocity.x();
+            current_velocity_cmd_.twist.linear.y = -rotated_linear_velocity.y();
+            current_velocity_cmd_.twist.linear.z = rotated_linear_velocity.z();
+            current_velocity_cmd_.twist.angular.x = rotated_angular_velocity.x();
+            current_velocity_cmd_.twist.angular.y = rotated_angular_velocity.y();
+            current_velocity_cmd_.twist.angular.z = rotated_angular_velocity.z();
 
             this->delta_twist_cmd_publisher_->publish(current_velocity_cmd_);
         }
@@ -576,6 +622,8 @@ private:
     geometry_msgs::msg::Pose::SharedPtr target_pose_ ;
     geometry_msgs::msg::TwistStamped current_velocity_cmd_;
 
+    geometry_msgs::msg::TransformStamped::SharedPtr planning_frame_to_servo_frame_transform_;
+
     rclcpp::Clock system_clock_;
     
     // ros parameters
@@ -585,6 +633,8 @@ private:
     std::string servo_controller_;
     std::string non_servo_controller_;
     std::string servo_node_namespace_;
+    std::string planning_frame_;
+    std::string servo_frame_;
     
     double P_GAIN_;
     double I_GAIN_;

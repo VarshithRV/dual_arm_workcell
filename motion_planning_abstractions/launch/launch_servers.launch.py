@@ -191,9 +191,11 @@ def launch_setup(context, *args, **kwargs):
                 "servo_node_namespace": "left_servo_node_main",
                 "P_GAIN": 1.0,
                 "I_GAIN": 0.0,
-                "D_GAIN": 1.0,
-                "K_GAIN": 1.0,
+                "D_GAIN": 0.0,
+                "K_GAIN": 0.5,
                 "max_speed": 1.0,# m/s
+                "linear_stop_threshold": 0.01, #m
+                "angular_stop_threshold": 0.01, #rad
             },
         ]
     )
