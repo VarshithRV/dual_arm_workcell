@@ -96,7 +96,6 @@ public:
 
         // declare parameters
         node_->declare_parameter<std::string>("planning_group", "left_ur16e");
-        node_->declare_parameter<std::string>("arm_side", "left");
         node_->declare_parameter<std::string>("endeffector_link", "left_tool0");
         node_->declare_parameter<std::string>("servo_controller", "left_forward_position_controller");
         node_->declare_parameter<std::string>("non_servo_controller", "left_scaled_joint_trajectory_controller");
@@ -108,26 +107,22 @@ public:
         node_->declare_parameter<double>("I_GAIN", 1.0);
         node_->declare_parameter<double>("D_GAIN", 1.0);
         node_->declare_parameter<double>("K_GAIN", 1.0);
-        node_->declare_parameter<double>("max_speed", 1.0); // in ms-1
         node_->declare_parameter<double>("linear_stop_threshold",0.001); // m
         node_->declare_parameter<double>("angular_stop_threshold",0.01); // rad
         node_->declare_parameter<double>("target_pose_timeout",2.0); // s
         
         // get parameters
         planning_group_ = node_->get_parameter("planning_group").as_string();
-        arm_side_ = node_->get_parameter("arm_side").as_string();
         endeffector_link_ = node_->get_parameter("endeffector_link").as_string();
         servo_controller_ = node_->get_parameter("servo_controller").as_string();
         non_servo_controller_ = node_->get_parameter("non_servo_controller").as_string();
         servo_node_namespace_ = node_->get_parameter("servo_node_namespace").as_string();
         planning_frame_ = node_->get_parameter("planning_frame").as_string();
-        servo_frame_ = node_->get_parameter("servo_frame").as_string();
 
         P_GAIN_ = node_->get_parameter("P_GAIN").as_double();
         I_GAIN_ = node_->get_parameter("I_GAIN").as_double();
         D_GAIN_ = node_->get_parameter("D_GAIN").as_double();
         K_GAIN_ = node_->get_parameter("K_GAIN").as_double();
-        max_speed_ = node_->get_parameter("max_speed").as_double();
         linear_stop_threshold_ = node_->get_parameter("linear_stop_threshold").as_double();
         angular_stop_threshold_ = node_->get_parameter("angular_stop_threshold").as_double();
         target_pose_timeout_ = node_->get_parameter("target_pose_timeout").as_double();
@@ -517,7 +512,6 @@ public:
     }
 
     void control_loop_(){
-        
         if(current_state_ == ACTIVE_TRACKING and target_pose_ != nullptr){
             auto current_pose = this->move_group_interface_->getCurrentPose();
             
@@ -531,8 +525,8 @@ public:
             
             auto target_orientation_normalized_q = target_orientation_q.normalized();
             auto orientation_error = target_orientation_q*current_orientation_q.inverse();
-            
-            if(linear_error_.norm()<linear_stop_threshold_ && std::abs(1.0-(orientation_error.norm()))<angular_stop_threshold_){
+
+            if(linear_error_.norm()<linear_stop_threshold_ && std::abs(Eigen::AngleAxisd(orientation_error).angle())<angular_stop_threshold_){
                 RCLCPP_INFO(node_->get_logger(),"finished tracking this pose");
                 current_state_ = READY;
                 return;
@@ -543,15 +537,6 @@ public:
             
             // get the PIDAngularVelocity
             auto angular_velocity = pid_angular_velocity_interface_.get_velocity(current_orientation_q, target_orientation_q);
-            
-            // testing tag
-            RCLCPP_INFO(node_->get_logger(),"Current pose : %f, %f, %f",current_pose.pose.position.x,current_pose.pose.position.y,current_pose.pose.position.z);
-            RCLCPP_INFO(node_->get_logger(),"Current pose linear : %f, %f, %f",current_pose_linear[0],current_pose_linear[1],current_pose_linear[2]);
-            RCLCPP_INFO(node_->get_logger(),"Target pose linear : %f, %f, %f",target_pose_linear[0],target_pose_linear[1],target_pose_linear[2]);
-            RCLCPP_INFO(node_->get_logger(),"Error : %f, %f, %f",linear_error_[0],linear_error_[1],linear_error_[2]);
-            RCLCPP_INFO(node_->get_logger(),"linear_velocity : %f, %f, %f",linear_velocity[0],linear_velocity[1],linear_velocity[2]);
-            RCLCPP_INFO(node_->get_logger(),"Linear error norm : %f",linear_error_.norm());
-            RCLCPP_INFO(node_->get_logger(),"Orientation error norm : %f",(1-orientation_error.norm()));
 
             current_velocity_cmd_.header.frame_id = planning_frame_;
             current_velocity_cmd_.header.stamp = node_->now();
@@ -600,13 +585,11 @@ private:
     
     // ros parameters
     std::string planning_group_;
-    std::string arm_side_;
     std::string endeffector_link_;
     std::string servo_controller_;
     std::string non_servo_controller_;
     std::string servo_node_namespace_;
     std::string planning_frame_;
-    std::string servo_frame_;
     
     double P_GAIN_;
     double I_GAIN_;

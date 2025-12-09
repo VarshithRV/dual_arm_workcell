@@ -184,7 +184,6 @@ def launch_setup(context, *args, **kwargs):
             {"use_sim_time": use_sim_time},
             {
                 "planning_group": "left_ur16e",
-                "arm_side": "left",
                 "endeffector_link": "left_tool0",
                 "servo_controller": "left_forward_position_controller",
                 "non_servo_controller": "left_scaled_joint_trajectory_controller",
@@ -193,11 +192,9 @@ def launch_setup(context, *args, **kwargs):
                 "I_GAIN": 0.0,
                 "D_GAIN": 0.0,
                 "K_GAIN": 0.5,
-                "max_speed": 1.0,# m/s
                 "linear_stop_threshold": 0.01, #m
                 "angular_stop_threshold": 0.01, #rad
                 "planning_frame":"world",
-                "servo_frame":"left_base_link",
             },
         ]
     )
