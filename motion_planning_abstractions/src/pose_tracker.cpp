@@ -176,30 +176,6 @@ public:
 
         callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
-        // need to get the rotation transform from world to left_base_link
-        size_t attempts=0;
-        while(attempts<10){
-            auto tf_buffer_ = std::make_unique<tf2_ros::Buffer>(node_->get_clock());
-            auto tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
-            geometry_msgs::msg::TransformStamped t;
-            try{
-                t = tf_buffer_->lookupTransform(
-                    servo_frame_, planning_frame_ ,tf2::TimePointZero
-                );
-            }catch(const tf2::TransformException &ex){
-                RCLCPP_INFO(node_->get_logger(),"Could not get transform between planning frame to servo frame due to exception : %s",ex.what());
-                t.transform.rotation.w = 0.0;
-                t.transform.rotation.x = 0.0;
-                t.transform.rotation.y = 0.707;
-                t.transform.rotation.z = 0.707;
-            }
-            planning_frame_to_servo_frame_transform_ = std::make_shared<geometry_msgs::msg::TransformStamped>(t);
-            RCLCPP_INFO(node_->get_logger(),"Acquired rotation between planning_frame and servo_frame(wxyz): %f, %f, %f, %f",planning_frame_to_servo_frame_transform_->transform.rotation.w,
-            planning_frame_to_servo_frame_transform_->transform.rotation.x,planning_frame_to_servo_frame_transform_->transform.rotation.y,planning_frame_to_servo_frame_transform_->transform.rotation.z);
-            std::this_thread::sleep_for(50ms);
-            attempts++;
-        }
-
         // servers
         print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",
             std::bind(&PoseTracker::print_state, this,std::placeholders::_1, std::placeholders::_2),
@@ -576,28 +552,15 @@ public:
             RCLCPP_INFO(node_->get_logger(),"linear_velocity : %f, %f, %f",linear_velocity[0],linear_velocity[1],linear_velocity[2]);
             RCLCPP_INFO(node_->get_logger(),"Linear error norm : %f",linear_error_.norm());
             RCLCPP_INFO(node_->get_logger(),"Orientation error norm : %f",(1-orientation_error.norm()));
-            
-            // this is in the world frame, need to get the stuff wrt servo frame
-            Eigen::Quaterniond transform_rotation = {planning_frame_to_servo_frame_transform_->transform.rotation.w,planning_frame_to_servo_frame_transform_->transform.rotation.x,
-                planning_frame_to_servo_frame_transform_->transform.rotation.y,planning_frame_to_servo_frame_transform_->transform.rotation.z
-            };
 
-            RCLCPP_INFO(node_->get_logger(),"Orientation transformation (wxyz): %f, %f, %f, %f",transform_rotation.w(),transform_rotation.x(),transform_rotation.y(),transform_rotation.z());
-
-            Eigen::Quaterniond translation_q(0.0,linear_velocity.x(),linear_velocity.y(),linear_velocity.z());
-            Eigen::Quaterniond omega_q(0.0,angular_velocity.x(),angular_velocity.y(),angular_velocity.z());
-
-            Eigen::Quaterniond rotated_linear_velocity = transform_rotation * translation_q * transform_rotation.inverse();
-            Eigen::Quaterniond rotated_angular_velocity = transform_rotation * omega_q * transform_rotation.inverse();
-
-            current_velocity_cmd_.header.frame_id = servo_frame_;
+            current_velocity_cmd_.header.frame_id = planning_frame_;
             current_velocity_cmd_.header.stamp = node_->now();
-            current_velocity_cmd_.twist.linear.x = rotated_linear_velocity.x();
-            current_velocity_cmd_.twist.linear.y = rotated_linear_velocity.y();
-            current_velocity_cmd_.twist.linear.z = rotated_linear_velocity.z();
-            current_velocity_cmd_.twist.angular.x = rotated_angular_velocity.x();
-            current_velocity_cmd_.twist.angular.y = rotated_angular_velocity.y();
-            current_velocity_cmd_.twist.angular.z = rotated_angular_velocity.z();
+            current_velocity_cmd_.twist.linear.x = linear_velocity.x();
+            current_velocity_cmd_.twist.linear.y = linear_velocity.y();
+            current_velocity_cmd_.twist.linear.z = linear_velocity.z();
+            current_velocity_cmd_.twist.angular.x = angular_velocity.x();
+            current_velocity_cmd_.twist.angular.y = angular_velocity.y();
+            current_velocity_cmd_.twist.angular.z = angular_velocity.z();
             this->delta_twist_cmd_publisher_->publish(current_velocity_cmd_);
         }
     }
@@ -632,8 +595,6 @@ private:
 
     geometry_msgs::msg::Pose::SharedPtr target_pose_ ;
     geometry_msgs::msg::TwistStamped current_velocity_cmd_;
-
-    geometry_msgs::msg::TransformStamped::SharedPtr planning_frame_to_servo_frame_transform_;
 
     rclcpp::Clock system_clock_;
     

@@ -43,7 +43,7 @@ low_pass_filter_coeff: 10.0  # Larger --> trust the filtered data more, trust th
 
 ## MoveIt properties
 move_group_name:  right_ur16e  # Often 'manipulator' or 'arm'
-planning_frame: world  # The MoveIt planning frame. Often 'base_link' or 'world'
+planning_frame: right_base_link  # The MoveIt planning frame. Often 'base_link' or 'world'
 
 ## Other frames
 ee_frame_name: right_tool0  # The name of the end effector link, used to return the EE pose
