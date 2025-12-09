@@ -177,18 +177,31 @@ public:
         callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
         // need to get the rotation transform from world to left_base_link
-        auto tf_buffer_ = std::make_unique<tf2_ros::Buffer>(node_->get_clock());
-        auto tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
-        geometry_msgs::msg::TransformStamped t;
-        try{
-            t = tf_buffer_->lookupTransform(
-                servo_frame_, planning_frame_,tf2::TimePointZero
-            );
-            RCLCPP_INFO(node_->get_logger(),"Acquired transform between planning frame to servo frame");
-        }catch(const tf2::TransformException &ex){
-            RCLCPP_INFO(node_->get_logger(),"Could not get transform between planning frame to servo frame due to exception : %s",ex.what());
+        size_t attempts=0;
+        while(attempts<10){
+            auto tf_buffer_ = std::make_unique<tf2_ros::Buffer>(node_->get_clock());
+            auto tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+            geometry_msgs::msg::TransformStamped t;
+            try{
+                t = tf_buffer_->lookupTransform(
+                    planning_frame_, servo_frame_ ,tf2::TimePointZero
+                );
+                RCLCPP_INFO(node_->get_logger(),"Acquired transform between planning frame to servo frame");
+            }catch(const tf2::TransformException &ex){
+                RCLCPP_INFO(node_->get_logger(),"Could not get transform between planning frame to servo frame due to exception : %s",ex.what());
+            }
+            planning_frame_to_servo_frame_transform_ = std::make_shared<geometry_msgs::msg::TransformStamped>(t);
+            RCLCPP_INFO(node_->get_logger(),"Acquired rotation between planning_frame and servo_frame(wxyz): %f, %f, %f, %f",planning_frame_to_servo_frame_transform_->transform.rotation.w,
+            planning_frame_to_servo_frame_transform_->transform.rotation.x,planning_frame_to_servo_frame_transform_->transform.rotation.y,planning_frame_to_servo_frame_transform_->transform.rotation.z);
+            std::this_thread::sleep_for(50ms);
+            attempts++;
         }
-        planning_frame_to_servo_frame_transform_ = std::make_shared<geometry_msgs::msg::TransformStamped>(t);
+        ///////////////////// the tf call isn't getting, doens't recognize the string world, wtf
+        planning_frame_to_servo_frame_transform_->transform.rotation.w = 0.0;
+        planning_frame_to_servo_frame_transform_->transform.rotation.x = 0.0;
+        planning_frame_to_servo_frame_transform_->transform.rotation.y = 0.707;
+        planning_frame_to_servo_frame_transform_->transform.rotation.z = 0.707;
+        ///////////////////////////////////////////////////////////
 
         // servers
         print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",
@@ -572,6 +585,8 @@ public:
                 planning_frame_to_servo_frame_transform_->transform.rotation.y,planning_frame_to_servo_frame_transform_->transform.rotation.z
             };
 
+            RCLCPP_INFO(node_->get_logger(),"Orientation transformation (wxyz): %f, %f, %f, %f",transform_rotation.w(),transform_rotation.x(),transform_rotation.y(),transform_rotation.z());
+
             Eigen::Quaterniond translation_q(0.0,linear_velocity.x(),linear_velocity.y(),linear_velocity.z());
             Eigen::Quaterniond omega_q(0.0,angular_velocity.x(),angular_velocity.y(),angular_velocity.z());
 
@@ -581,12 +596,14 @@ public:
             current_velocity_cmd_.header.frame_id = servo_frame_;
             current_velocity_cmd_.header.stamp = node_->now();
             current_velocity_cmd_.twist.linear.x = rotated_linear_velocity.x();
-            current_velocity_cmd_.twist.linear.y = -rotated_linear_velocity.y();
+            current_velocity_cmd_.twist.linear.y = rotated_linear_velocity.y();
             current_velocity_cmd_.twist.linear.z = rotated_linear_velocity.z();
-            current_velocity_cmd_.twist.angular.x = rotated_angular_velocity.x();
-            current_velocity_cmd_.twist.angular.y = rotated_angular_velocity.y();
-            current_velocity_cmd_.twist.angular.z = rotated_angular_velocity.z();
-
+            // current_velocity_cmd_.twist.angular.x = rotated_angular_velocity.x();
+            // current_velocity_cmd_.twist.angular.y = rotated_angular_velocity.y();
+            // current_velocity_cmd_.twist.angular.z = rotated_angular_velocity.z();
+            current_velocity_cmd_.twist.angular.x = 0.0;
+            current_velocity_cmd_.twist.angular.y = 0.0;
+            current_velocity_cmd_.twist.angular.z = 0.0;
             this->delta_twist_cmd_publisher_->publish(current_velocity_cmd_);
         }
     }
