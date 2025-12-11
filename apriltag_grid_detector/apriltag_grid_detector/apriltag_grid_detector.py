@@ -88,9 +88,9 @@ class Deprojection(Node):
         self.detected_image = None
 
         # Topics
-        detected_image_topic = "/detected_image_raw"
-        pose_topic = f"/{self.object_name}_pose"
-        filtered_pose_topic = f"/{self.object_name}_filtered_pose"
+        detected_image_topic = "~/detected_image_raw"
+        pose_topic = f"~/{self.object_name}_pose"
+        filtered_pose_topic = f"~/{self.object_name}_filtered_pose"
 
         # --- Publishers ---
         self.detected_image_pub = self.create_publisher(Image, detected_image_topic, 10)
