@@ -13,7 +13,7 @@ def generate_launch_description():
                 parameters=[
                     {
                         "alpha": 0.25,
-                        "marker_separation": 15.0,  # mm
+                        "marker_separation": 4.0,  # mm
                         "marker_size": 40.0,        # mm
 
                         "object.name": "object0",
@@ -23,9 +23,9 @@ def generate_launch_description():
                         "grid.cols": 2,
                         "grid.ids": [9, 10, 11, 12],
 
-                        "color_image_topic": "/camera/camera/color/image_raw",
-                        "camera_info_topic": "/camera/camera/color/camera_info",
-                        "depth_image_topic": "/camera/camera/depth/image_rect_raw",
+                        "color_image_topic": "/camera/right_camera/color/image_raw",
+                        "camera_info_topic": "/camera/right_camera/color/camera_info",
+                        "depth_image_topic": "/camera/right_camera/depth/image_rect_raw",
                         "detection_rate": 30.0,
                     }
                 ],

@@ -52,6 +52,8 @@ def launch_setup():
             'spatial_filter.enable': 'true',
             'temporal_filter.enable': 'true',
             'hole_filling_filter.enable': 'true',
+            'rgb_camera.color_profile':'640,480,30',
+            'depth_module.color_profile':'640,480,30',
         }.items(),
         condition=UnlessCondition(use_fake_hardware),
     )
@@ -75,6 +77,8 @@ def launch_setup():
             'spatial_filter.enable': 'true',
             'temporal_filter.enable': 'true',
             'hole_filling_filter.enable': 'true',
+            'rgb_camera.color_profile':'640,480,30',
+            'depth_module.color_profile':'640,480,30',
         }.items(),
         condition=UnlessCondition(use_fake_hardware),
     )
