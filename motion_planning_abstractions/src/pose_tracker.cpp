@@ -57,6 +57,7 @@ ACTIVE_TRACKING 2 // node state when the node is actively tracking, the robot sh
 #include "std_srvs/srv/trigger.hpp"
 #include "std_srvs/srv/set_bool.hpp"
 #include "std_msgs/msg/int16.hpp"
+#include "std_msgs/msg/float32.hpp"
 #include "motion_planning_abstractions_msgs/srv/pick.hpp"
 #include "ur_msgs/srv/set_io.hpp"
 #include "open_set_object_detection_msgs/srv/get_object_locations.hpp"
@@ -245,6 +246,8 @@ public:
         std::string delta_twist_cmd_topic = servo_node_namespace_ + "/delta_twist_cmds";
         delta_twist_cmd_publisher_ = node_->create_publisher<geometry_msgs::msg::TwistStamped>(delta_twist_cmd_topic,10);
         tracker_status_publisher_ = node_->create_publisher<std_msgs::msg::Int16>("~/tracker_status",10);
+        linear_error_publisher_ = node_->create_publisher<std_msgs::msg::Float32>("~/linear_error",10);
+        angular_error_publisher_ = node_->create_publisher<std_msgs::msg::Float32>("~/angular_error",10);
         
         // subscribers
         target_pose_subscription_ = node_->create_subscription<geometry_msgs::msg::Pose>("~/target_pose",
@@ -574,6 +577,10 @@ public:
             current_velocity_cmd_.twist.angular.y = angular_velocity.y();
             current_velocity_cmd_.twist.angular.z = angular_velocity.z();
             this->delta_twist_cmd_publisher_->publish(current_velocity_cmd_); // this should be filtered velocity
+
+            // publish the linear an angular errors
+            this->linear_error_publisher_->publish([linear_error_]{std_msgs::msg::Float32 msg; msg.data = linear_error_.norm(); return msg;}());
+            this->angular_error_publisher_->publish([orientation_error]{std_msgs::msg::Float32 msg; msg.data = Eigen::AngleAxisd(orientation_error).angle(); return msg;}());
         }
     }
 
@@ -592,6 +599,8 @@ private:
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr stop_servo_client_;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr delta_twist_cmd_publisher_;
     rclcpp::Publisher<std_msgs::msg::Int16>::SharedPtr tracker_status_publisher_;
+    rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr linear_error_publisher_;
+    rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr angular_error_publisher_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr prepare_tracker_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr unprepare_tracker_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr start_tracker_;

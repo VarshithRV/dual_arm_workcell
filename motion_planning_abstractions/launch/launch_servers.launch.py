@@ -188,10 +188,10 @@ def launch_setup(context, *args, **kwargs):
                 "servo_controller": "left_forward_position_controller",
                 "non_servo_controller": "left_scaled_joint_trajectory_controller",
                 "servo_node_namespace": "left_servo_node_main",
-                "P_GAIN": 5.0,
+                "P_GAIN": 1.0,
                 "I_GAIN": 0.0,
                 "D_GAIN": 0.0,
-                "K_GAIN": 0.5,
+                "K_GAIN": 1.0,
                 "terminate":False, # should the tracking terminate?
                 "linear_stop_threshold": 0.01, #m
                 "angular_stop_threshold": 0.01, #rad
@@ -361,12 +361,12 @@ def launch_setup(context, *args, **kwargs):
 
     nodes_to_start = [
         left_pose_tracking_node,
-        # rws_pick_and_place_server,
-        # suction_pick_and_place_server,
-        # left_preaction_server,
-        # right_preaction_server,
-        # left_rest_server,
-        # right_rest_server,
+        rws_pick_and_place_server,
+        suction_pick_and_place_server,
+        left_preaction_server,
+        right_preaction_server,
+        left_rest_server,
+        right_rest_server,
     ]
     
     return nodes_to_start
