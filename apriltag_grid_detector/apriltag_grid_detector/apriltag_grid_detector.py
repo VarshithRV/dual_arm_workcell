@@ -35,33 +35,50 @@ class Deprojection(Node):
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(
             cv2.aruco.DICT_APRILTAG_36h11
         )
-        self.aruco_parameters = cv2.aruco.DetectorParameters()
-        self.aruco_detector = cv2.aruco.ArucoDetector(
-            self.aruco_dict, self.aruco_parameters
-        )
 
         # --- Parameters ---
         self.declare_parameter("alpha", 0.25)
         self.declare_parameter("marker_separation", 15.0)  # mm
         self.declare_parameter("marker_size", 40.0)        # mm
-        # Use dot-notation for ROS2 parameters
+
+        # Object name
         self.declare_parameter("object.name", "object0")
-        self.declare_parameter("object.grid", [[0, 1], [2, 3]])
-        self.declare_parameter("color_image_topic", "/camera/color/image_raw")
-        self.declare_parameter("camera_info_topic", "/camera/color/camera_info")
-        self.declare_parameter("depth_image_topic", "/camera/depth/image_rect_raw")
+
+        # Grid description: rows, cols, and flattened IDs (row-major)
+        self.declare_parameter("grid.rows", 2)
+        self.declare_parameter("grid.cols", 2)
+        self.declare_parameter("grid.ids", [0, 1, 2, 3])
+
+        # Camera topics
+        self.declare_parameter("color_image_topic", "/camera/right_camera/color/image_raw")
+        self.declare_parameter("camera_info_topic", "/camera/right_camera/color/camera_info")
+        self.declare_parameter("depth_image_topic", "/camera/right_camera/depth/image_rect_raw")
         self.declare_parameter("detection_rate", 30.0)
 
+        # --- Read parameters ---
         self.alpha = float(self.get_parameter("alpha").value)
-        self.marker_separation = float(self.get_parameter("marker_separation").value) / 1000.0  # m
-        self.marker_size = float(self.get_parameter("marker_size").value) / 1000.0              # m
-        self.grid = np.array(self.get_parameter("object.grid").value, dtype=int)
+        self.marker_separation = float(self.get_parameter("marker_separation").value) / 1000.0
+        self.marker_size = float(self.get_parameter("marker_size").value) / 1000.0
+
         self.object_name = str(self.get_parameter("object.name").value)
-        self.detection_rate = float(self.get_parameter("detection_rate").value)
+
+        grid_rows = int(self.get_parameter("grid.rows").value)
+        grid_cols = int(self.get_parameter("grid.cols").value)
+        grid_ids = self.get_parameter("grid.ids").value  # list of ints
+
+        if len(grid_ids) != grid_rows * grid_cols:
+            self.get_logger().error(
+                f"grid.ids length ({len(grid_ids)}) != grid.rows*grid.cols ({grid_rows}*{grid_cols})"
+            )
+            raise RuntimeError("Invalid grid parameter sizes")
+
+        self.grid = np.array(grid_ids, dtype=int).reshape((grid_rows, grid_cols))
 
         camera_color_topic = str(self.get_parameter("color_image_topic").value)
         camera_info_topic = str(self.get_parameter("camera_info_topic").value)
         camera_depth_topic = str(self.get_parameter("depth_image_topic").value)
+        self.detection_rate = float(self.get_parameter("detection_rate").value)
+
 
         self.get_logger().info("Apriltag grid detector node started with params:")
         self.get_logger().info(f"  Alpha: {self.alpha}")

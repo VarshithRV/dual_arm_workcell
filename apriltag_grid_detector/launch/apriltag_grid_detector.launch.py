@@ -13,16 +13,19 @@ def generate_launch_description():
                 parameters=[
                     {
                         "alpha": 0.25,
-                        "marker_separation": 15.0,
-                        "marker_size": 40.0,
+                        "marker_separation": 15.0,  # mm
+                        "marker_size": 40.0,        # mm
+
                         "object.name": "object0",
-                        "object.grid": [
-                            [9, 10],
-                            [11, 12],
-                        ],
-                        "color_image_topic": "/camera/right_camera/color/image_raw",
-                        "camera_info_topic": "/camera/right_camera/color/camera_info",
-                        "depth_image_topic": "/camera/right_camera/depth/image_rect_raw",
+
+                        # 2 rows x 2 cols, flattened [row0, row1, ...]
+                        "grid.rows": 2,
+                        "grid.cols": 2,
+                        "grid.ids": [9, 10, 11, 12],
+
+                        "color_image_topic": "/camera/camera/color/image_raw",
+                        "camera_info_topic": "/camera/camera/color/camera_info",
+                        "depth_image_topic": "/camera/camera/depth/image_rect_raw",
                         "detection_rate": 30.0,
                     }
                 ],
