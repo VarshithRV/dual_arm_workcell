@@ -188,13 +188,15 @@ def launch_setup(context, *args, **kwargs):
                 "servo_controller": "left_forward_position_controller",
                 "non_servo_controller": "left_scaled_joint_trajectory_controller",
                 "servo_node_namespace": "left_servo_node_main",
-                "P_GAIN": 1.0,
+                "P_GAIN": 5.0,
                 "I_GAIN": 0.0,
                 "D_GAIN": 0.0,
                 "K_GAIN": 0.5,
                 "linear_stop_threshold": 0.01, #m
                 "angular_stop_threshold": 0.01, #rad
                 "planning_frame":"world",
+                "linear_iir_alpha":0.9, # range [0.0,1.0], more implies filter more
+                "angular_iir_alpha":0.5, # range [0.0,1.0], more implies filter more
             },
         ]
     )

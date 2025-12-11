@@ -110,6 +110,8 @@ public:
         node_->declare_parameter<double>("linear_stop_threshold",0.001); // m
         node_->declare_parameter<double>("angular_stop_threshold",0.01); // rad
         node_->declare_parameter<double>("target_pose_timeout",2.0); // s
+        node_->declare_parameter<double>("linear_iir_alpha",0.2); // from [0.0,1.0] more means filter more
+        node_->declare_parameter<double>("angular_iir_alpha",0.2); // from [0.0,1.0] more means filter more
         
         // get parameters
         planning_group_ = node_->get_parameter("planning_group").as_string();
@@ -126,6 +128,8 @@ public:
         linear_stop_threshold_ = node_->get_parameter("linear_stop_threshold").as_double();
         angular_stop_threshold_ = node_->get_parameter("angular_stop_threshold").as_double();
         target_pose_timeout_ = node_->get_parameter("target_pose_timeout").as_double();
+        linear_iir_alpha_ = node_->get_parameter("linear_iir_alpha").as_double();
+        angular_iir_alpha_ = node_->get_parameter("angular_iir_alpha").as_double();
 
         // pid linear and angular interfaces
         pid_linear_velocity_interface_ = PIDLinearVelocity(P_GAIN_, I_GAIN_, D_GAIN_, K_GAIN_, 0.3, 50.0, 10.0);
@@ -511,6 +515,24 @@ public:
 
     }
 
+    Eigen::Vector3d apply_linear_iir_filter(Eigen::Vector3d linear_velocity){
+        filtered_linear_velocity_ = (1-linear_iir_alpha_)*linear_velocity + linear_iir_alpha_*filtered_linear_velocity_;
+        return filtered_linear_velocity_;
+    }
+
+    Eigen::Vector3d apply_angular_iir_filter(Eigen::Vector3d angular_velocity){
+        filtered_angular_velocity_ = (1-angular_iir_alpha_)*angular_velocity.norm() + angular_iir_alpha_*filtered_angular_velocity_;
+        return (filtered_angular_velocity_/angular_velocity.norm())*angular_velocity;
+    }
+
+    void zero_filtered_linear_velocity(){
+        filtered_linear_velocity_ = {0.0,0.0,0.0};
+    }
+
+    void zero_filtered_angular_velocity(){
+        filtered_angular_velocity_ = 0.0;
+    }
+
     void control_loop_(){
         if(current_state_ == ACTIVE_TRACKING and target_pose_ != nullptr){
             auto current_pose = this->move_group_interface_->getCurrentPose();
@@ -518,7 +540,6 @@ public:
             Eigen::Vector3d current_pose_linear = {current_pose.pose.position.x,current_pose.pose.position.y,current_pose.pose.position.z};
             Eigen::Vector3d target_pose_linear = {target_pose_->position.x,target_pose_->position.y,target_pose_->position.z};
             Eigen::Vector3d linear_error_ = target_pose_linear - current_pose_linear;
-
             
             Eigen::Quaterniond current_orientation_q = {current_pose.pose.orientation.w, current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z};
             Eigen::Quaterniond target_orientation_q = {target_pose_->orientation.w, target_pose_->orientation.x, target_pose_->orientation.y, target_pose_->orientation.z};
@@ -528,15 +549,17 @@ public:
 
             if(linear_error_.norm()<linear_stop_threshold_ && std::abs(Eigen::AngleAxisd(orientation_error).angle())<angular_stop_threshold_){
                 RCLCPP_INFO(node_->get_logger(),"finished tracking this pose");
+                zero_filtered_linear_velocity();
+                zero_filtered_angular_velocity();
                 current_state_ = READY;
                 return;
             }
             
             // get the PIDLinearVelocity
-            auto linear_velocity = pid_linear_velocity_interface_.get_velocity(current_pose_linear, target_pose_linear);
+            auto linear_velocity = apply_linear_iir_filter(pid_linear_velocity_interface_.get_velocity(current_pose_linear, target_pose_linear));
             
             // get the PIDAngularVelocity
-            auto angular_velocity = pid_angular_velocity_interface_.get_velocity(current_orientation_q, target_orientation_q);
+            auto angular_velocity = apply_angular_iir_filter(pid_angular_velocity_interface_.get_velocity(current_orientation_q, target_orientation_q));
 
             current_velocity_cmd_.header.frame_id = planning_frame_;
             current_velocity_cmd_.header.stamp = node_->now();
@@ -546,7 +569,7 @@ public:
             current_velocity_cmd_.twist.angular.x = angular_velocity.x();
             current_velocity_cmd_.twist.angular.y = angular_velocity.y();
             current_velocity_cmd_.twist.angular.z = angular_velocity.z();
-            this->delta_twist_cmd_publisher_->publish(current_velocity_cmd_);
+            this->delta_twist_cmd_publisher_->publish(current_velocity_cmd_); // this should be filtered velocity
         }
     }
 
@@ -581,6 +604,9 @@ private:
     geometry_msgs::msg::Pose::SharedPtr target_pose_ ;
     geometry_msgs::msg::TwistStamped current_velocity_cmd_;
 
+    Eigen::Vector3d filtered_linear_velocity_;
+    double filtered_angular_velocity_;
+
     rclcpp::Clock system_clock_;
     
     // ros parameters
@@ -600,6 +626,8 @@ private:
     double angular_stop_threshold_;
     double target_pose_timeout_;
     double last_message_time_;
+    double linear_iir_alpha_;
+    double angular_iir_alpha_;
 
     uint8_t current_state_=NOT_READY;
 
