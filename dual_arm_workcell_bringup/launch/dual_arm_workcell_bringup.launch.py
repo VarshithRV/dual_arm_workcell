@@ -48,10 +48,11 @@ def launch_setup():
             'camera_name': 'left_camera',
             'align_depth.enable': 'true',
             'serial_no': '_210622060509',
-            'pointcloud.enable': 'true',
+            'pointcloud.enable': 'false',
             'spatial_filter.enable': 'true',
             'temporal_filter.enable': 'true',
             'hole_filling_filter.enable': 'true',
+            # 'use_sim_time':use_sim_time,
         }.items(),
         condition=UnlessCondition(use_fake_hardware),
     )
@@ -60,6 +61,9 @@ def launch_setup():
         PythonLaunchDescriptionSource(
             os.path.join(bringup_pkg, 'launch', 'left_camera_left_wrist_3_link_calibration.launch.py')
         ),
+        # launch_arguments={
+        #     'use_sim_time':use_sim_time,
+        # },
         condition=UnlessCondition(use_fake_hardware),
     )
 
@@ -71,10 +75,11 @@ def launch_setup():
             'camera_name': 'right_camera',
             'align_depth.enable': 'true',
             'serial_no': '_211122061649',
-            'pointcloud.enable': 'true',
+            'pointcloud.enable': 'false',
             'spatial_filter.enable': 'true',
             'temporal_filter.enable': 'true',
             'hole_filling_filter.enable': 'true',
+            # 'use_sim_time':use_sim_time,
         }.items(),
         condition=UnlessCondition(use_fake_hardware),
     )
@@ -83,6 +88,9 @@ def launch_setup():
         PythonLaunchDescriptionSource(
             os.path.join(bringup_pkg, 'launch', 'right_camera_right_wrist_3_link_calibration.launch.py')
         ),
+        # launch_arguments={
+        #     'use_sim_time':use_sim_time,
+        # },
         condition=UnlessCondition(use_fake_hardware),
     )
 

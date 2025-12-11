@@ -2,9 +2,22 @@
 """ EYE-IN-HAND: left_wrist_3_link -> left_camera_link """
 from launch import LaunchDescription
 from launch_ros.actions import Node
-
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description() -> LaunchDescription:
+    declared_arguments = []
+
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "use_sim_time",
+            default_value="false",
+            description="Use simulation (Gazebo) clock if true.",
+        )
+    )
+
+    use_sim_time = LaunchConfiguration("use_sim_time")
+    
     nodes = [
         Node(
             package="tf2_ros",
@@ -36,6 +49,9 @@ def generate_launch_description() -> LaunchDescription:
                 # "--yaw",
                 # "1.57259",
             ],
+            parameters=[
+                {"use_sim_time": use_sim_time},
+            ],
         ),
     ]
-    return LaunchDescription(nodes)
+    return LaunchDescription(declared_arguments + nodes)
