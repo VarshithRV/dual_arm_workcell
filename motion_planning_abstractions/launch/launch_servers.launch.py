@@ -192,6 +192,7 @@ def launch_setup(context, *args, **kwargs):
                 "I_GAIN": 0.0,
                 "D_GAIN": 0.0,
                 "K_GAIN": 0.5,
+                "terminate":False, # should the tracking terminate?
                 "linear_stop_threshold": 0.01, #m
                 "angular_stop_threshold": 0.01, #rad
                 "planning_frame":"world",

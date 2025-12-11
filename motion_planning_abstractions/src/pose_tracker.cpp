@@ -102,6 +102,8 @@ public:
         node_->declare_parameter<std::string>("servo_node_namespace", "left_servo_node_main");
         node_->declare_parameter<std::string>("planning_frame", "world");
         node_->declare_parameter<std::string>("servo_frame", "left_base_link");
+        
+        node_->declare_parameter<bool>("terminate",true); // should the tracker terminate?
 
         node_->declare_parameter<double>("P_GAIN", 1.0);
         node_->declare_parameter<double>("I_GAIN", 1.0);
@@ -121,6 +123,8 @@ public:
         servo_node_namespace_ = node_->get_parameter("servo_node_namespace").as_string();
         planning_frame_ = node_->get_parameter("planning_frame").as_string();
 
+        terminate_ = node_->get_parameter("terminate").as_bool();
+        
         P_GAIN_ = node_->get_parameter("P_GAIN").as_double();
         I_GAIN_ = node_->get_parameter("I_GAIN").as_double();
         D_GAIN_ = node_->get_parameter("D_GAIN").as_double();
@@ -547,7 +551,7 @@ public:
             auto target_orientation_normalized_q = target_orientation_q.normalized();
             auto orientation_error = target_orientation_q*current_orientation_q.inverse();
 
-            if(linear_error_.norm()<linear_stop_threshold_ && std::abs(Eigen::AngleAxisd(orientation_error).angle())<angular_stop_threshold_){
+            if(terminate_ && linear_error_.norm()<linear_stop_threshold_ && std::abs(Eigen::AngleAxisd(orientation_error).angle())<angular_stop_threshold_){
                 RCLCPP_INFO(node_->get_logger(),"finished tracking this pose");
                 zero_filtered_linear_velocity();
                 zero_filtered_angular_velocity();
@@ -616,6 +620,8 @@ private:
     std::string non_servo_controller_;
     std::string servo_node_namespace_;
     std::string planning_frame_;
+
+    bool terminate_;
     
     double P_GAIN_;
     double I_GAIN_;
