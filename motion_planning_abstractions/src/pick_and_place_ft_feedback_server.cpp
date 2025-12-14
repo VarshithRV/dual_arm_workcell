@@ -62,6 +62,8 @@ public:
         node_->declare_parameter<int>("pin_out1", 0);
         node_->declare_parameter<int>("pin_out2", 0);
         node_->declare_parameter<std::string>("arm_side", "left");
+        node_->declare_parameter<std::string>("servo_controller", "left_forward_velocity_controller");
+        node_->declare_parameter<std::string>("joint_trajectory_controller", "left_scaled_joint_trajectory_controller");
         node_->declare_parameter<double>("height_of_movement", 0.25);
         node_->declare_parameter<std::string>("endeffector_link", "right_tool0");
         node_->declare_parameter<double>("ft_threshold", 0.25);
@@ -108,6 +110,8 @@ public:
         pin_out2_ = node_->get_parameter("pin_out2").as_int();
         ft_threshold_ = node_->get_parameter("ft_threshold").as_double();
         arm_side = node_->get_parameter("arm_side").as_string();
+        servo_controller_ = node_->get_parameter("servo_controller").as_string();
+        joint_trajectory_controller_ = node_->get_parameter("joint_trajectory_controller").as_string();
         height_of_movement_ = node_->get_parameter("height_of_movement").as_double();
         endeffector_link_ = node_->get_parameter("endeffector_link").as_string();
         system_clock_ = rclcpp::Clock(RCL_SYSTEM_TIME);
@@ -264,8 +268,8 @@ public:
     bool switch_controller(){
         RCLCPP_INFO(node_->get_logger(),"Switching controller");
         auto request = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
-        request->activate_controllers = std::vector<std::string>{arm_side + "_forward_position_controller"};
-        request->deactivate_controllers = std::vector<std::string>{arm_side + "_scaled_joint_trajectory_controller"};
+        request->activate_controllers = std::vector<std::string>{servo_controller_};
+        request->deactivate_controllers = std::vector<std::string>{joint_trajectory_controller_};
         request->strictness = request->BEST_EFFORT;
 
         auto future = switch_controller_client_->async_send_request(request);
@@ -290,8 +294,8 @@ public:
     bool switch_back_controller(){
         RCLCPP_INFO(node_->get_logger(),"Switching back controller");
         auto request = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
-        request->activate_controllers = std::vector<std::string>{arm_side + "_scaled_joint_trajectory_controller"};
-        request->deactivate_controllers = std::vector<std::string>{arm_side + "_forward_position_controller"};
+        request->activate_controllers = std::vector<std::string>{joint_trajectory_controller_};
+        request->deactivate_controllers = std::vector<std::string>{servo_controller_};
         request->strictness = request->BEST_EFFORT;
 
         auto future = switch_controller_client_->async_send_request(request);
@@ -649,6 +653,8 @@ private:
     double speed_;
     double wrench_z_;
     std::string arm_side;
+    std::string servo_controller_;
+    std::string joint_trajectory_controller_;
     std::string planning_group_;
     std::vector<double> orientation_;
     std::vector<double> place_position_;

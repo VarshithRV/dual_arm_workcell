@@ -185,7 +185,7 @@ def launch_setup(context, *args, **kwargs):
             {
                 "planning_group": "left_ur16e",
                 "endeffector_link": "left_tool0",
-                "servo_controller": "left_forward_position_controller",
+                "servo_controller": "left_forward_velocity_controller",
                 "non_servo_controller": "left_scaled_joint_trajectory_controller",
                 "servo_node_namespace": "left_servo_node_main",
                 "P_GAIN": 1.0,
@@ -265,6 +265,8 @@ def launch_setup(context, *args, **kwargs):
             "pin_out1":12,
             "pin_out2":0,
             "arm_side":"left",
+            "servo_controller":"left_forward_velocity_controller",
+            "joint_trajectory_controller":"left_scaled_joint_trajectory_controller",
             "ft_threshold": 17.0,
             "speed":0.13,
             "pretouch_distance":0.04,
