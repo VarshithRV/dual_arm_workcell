@@ -529,6 +529,8 @@ public:
 
     Eigen::Vector3d apply_angular_iir_filter(Eigen::Vector3d angular_velocity){
         filtered_angular_velocity_ = (1-angular_iir_alpha_)*angular_velocity.norm() + angular_iir_alpha_*filtered_angular_velocity_;
+        if(angular_velocity.norm()<0.001)
+            return {0.0,0.0,0.0};
         return (filtered_angular_velocity_/angular_velocity.norm())*angular_velocity;
     }
 
@@ -581,6 +583,21 @@ public:
             // publish the linear an angular errors
             this->linear_error_publisher_->publish([linear_error_]{std_msgs::msg::Float32 msg; msg.data = linear_error_.norm(); return msg;}());
             this->angular_error_publisher_->publish([orientation_error]{std_msgs::msg::Float32 msg; msg.data = Eigen::AngleAxisd(orientation_error).angle(); return msg;}());
+        }
+
+        if(current_state_ != ACTIVE_TRACKING){
+            auto linear_velocity = apply_linear_iir_filter(Eigen::Vector3d{0.0,0.0,0.0});
+            auto angular_velocity = apply_angular_iir_filter(Eigen::Vector3d{0.0,0.0,0.0});
+
+            current_velocity_cmd_.header.frame_id = planning_frame_;
+            current_velocity_cmd_.header.stamp = node_->now();
+            current_velocity_cmd_.twist.linear.x = linear_velocity.x();
+            current_velocity_cmd_.twist.linear.y = linear_velocity.y();
+            current_velocity_cmd_.twist.linear.z = linear_velocity.z();
+            current_velocity_cmd_.twist.angular.x = angular_velocity.x();
+            current_velocity_cmd_.twist.angular.y = angular_velocity.y();
+            current_velocity_cmd_.twist.angular.z = angular_velocity.z();
+            this->delta_twist_cmd_publisher_->publish(current_velocity_cmd_); // this should be filtered velocity
         }
     }
 
