@@ -325,6 +325,7 @@ def launch_setup(context, *args, **kwargs):
         name="left_servo_node_main",
         parameters=[
             left_servo_params,
+            {"butterworth_filter_coeff": 1.5}, ## moveit servo doesn't load low pass filter coeff, default is 1.5
             robot_description,
             robot_description_semantic,
             robot_description_kinematics,
@@ -342,6 +343,7 @@ def launch_setup(context, *args, **kwargs):
         name="right_servo_node_main",
         parameters=[
             right_servo_params,
+            {"butterworth_filter_coeff": 1.5}, ## moveit servo doesn't load low pass filter coeff, default is 1.5
             robot_description,
             robot_description_semantic,
             robot_description_kinematics,
