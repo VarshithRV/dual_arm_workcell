@@ -2,7 +2,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch.conditions import UnlessCondition
+from launch.conditions import UnlessCondition, IfCondition
 from launch_ros.substitutions import FindPackageShare
 from launch_ros.parameter_descriptions import ParameterValue
 import os
@@ -55,14 +55,14 @@ def launch_setup():
             'rgb_camera.color_profile':'640,480,30',
             'depth_module.color_profile':'640,480,30',
         }.items(),
-        condition=UnlessCondition(use_fake_hardware),
+        condition=UnlessCondition(use_fake_hardware) and IfCondition(launch_cameras),
     )
 
     left_camera_calibration_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(bringup_pkg, 'launch', 'left_camera_left_wrist_3_link_calibration.launch.py')
         ),
-        condition=UnlessCondition(use_fake_hardware),
+        condition=UnlessCondition(use_fake_hardware) and IfCondition(launch_cameras),
     )
 
     right_camera_launch = IncludeLaunchDescription(
@@ -80,14 +80,14 @@ def launch_setup():
             'rgb_camera.color_profile':'640,480,30',
             'depth_module.color_profile':'640,480,30',
         }.items(),
-        condition=UnlessCondition(use_fake_hardware),
+        condition=UnlessCondition(use_fake_hardware) and IfCondition(launch_cameras),
     )
 
     right_camera_calibration_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(bringup_pkg, 'launch', 'right_camera_right_wrist_3_link_calibration.launch.py')
         ),
-        condition=UnlessCondition(use_fake_hardware),
+        condition=UnlessCondition(use_fake_hardware) and IfCondition(launch_cameras),
     )
 
     return [
