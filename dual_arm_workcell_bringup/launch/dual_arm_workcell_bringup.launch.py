@@ -13,6 +13,7 @@ def launch_setup():
     right_robot_ip = LaunchConfiguration('right_robot_ip')
     use_fake_hardware = LaunchConfiguration('use_fake_hardware')
     use_sim_time = LaunchConfiguration('use_sim_time')
+    launch_cameras = LaunchConfiguration('launch_cameras')
     
     dual_arm_workcell_driver_pkg = FindPackageShare('dual_arm_workcell_driver').find('dual_arm_workcell_driver')
     dual_arm_workcell_moveit_pkg = FindPackageShare('dual_arm_workcell_moveit_config').find('dual_arm_workcell_moveit_config')
@@ -132,6 +133,14 @@ def generate_launch_description():
             name="use_sim_time",
             default_value="false",
             description="Use sim time?",
+        )
+    )
+
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            name="launch_camera",
+            default_value="true",
+            description="Launch Cameras?",
         )
     )
 
