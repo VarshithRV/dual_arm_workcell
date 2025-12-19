@@ -17,7 +17,7 @@ scale:
 system_latency_compensation: 0.04
 
 ## Properties of outgoing commands
-publish_period: 0.004  # 1/Nominal publish rate [seconds]
+publish_period: 0.034  # 1/Nominal publish rate [seconds]
 low_latency_mode: false  # Set this to true to publish as soon as an incoming Twist command is received (publish_period is ignored)
 
 # What type of topic does your robot driver expect?
@@ -36,10 +36,7 @@ smoothing_filter_plugin_name: "online_signal_smoothing::ButterworthFilterPlugin"
 # which other nodes can use as a source for information about the planning environment.
 # NOTE: If a different node in your system is responsible for the "primary" planning scene instance (e.g. the MoveGroup node),
 # then is_primary_planning_scene_monitor needs to be set to false.
-is_primary_planning_scene_monitor: false
-
-## Incoming Joint State properties
-low_pass_filter_coeff: 10.0  # Larger --> trust the filtered data more, trust the measurements less. THIS IS NOT CONNECTED TO ANYTHING!!!!!!!!!!!!!!!!!!!!
+is_primary_planning_scene_monitor: true
 
 ## MoveIt properties
 move_group_name:  left_ur16e  # Often 'manipulator' or 'arm'
