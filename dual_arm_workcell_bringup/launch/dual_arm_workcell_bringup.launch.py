@@ -63,7 +63,6 @@ def launch_setup():
         PythonLaunchDescriptionSource(
             os.path.join(bringup_pkg, 'launch', 'left_camera_left_wrist_3_link_calibration.launch.py')
         ),
-        condition=UnlessCondition(use_fake_hardware) and IfCondition(launch_cameras),
     )
 
     right_camera_launch = IncludeLaunchDescription(
@@ -88,7 +87,6 @@ def launch_setup():
         PythonLaunchDescriptionSource(
             os.path.join(bringup_pkg, 'launch', 'right_camera_right_wrist_3_link_calibration.launch.py')
         ),
-        condition=UnlessCondition(use_fake_hardware) and IfCondition(launch_cameras),
     )
 
     return [
