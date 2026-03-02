@@ -78,6 +78,12 @@ def launch_setup(context, *args, **kwargs):
     left_reverse_port = LaunchConfiguration("left_reverse_port")
     left_script_sender_port = LaunchConfiguration("left_script_sender_port")
     left_trajectory_port = LaunchConfiguration("left_trajectory_port")
+    left_translation_x = LaunchConfiguration("left_translation_x")
+    left_translation_y = LaunchConfiguration("left_translation_y")
+    left_translation_z = LaunchConfiguration("left_translation_z")
+    left_rotation_r = LaunchConfiguration("left_rotation_r")
+    left_rotation_p = LaunchConfiguration("left_rotation_p")
+    left_rotation_y = LaunchConfiguration("left_rotation_y")
     left_joint_limit_params = PathJoinSubstitution([FindPackageShare(description_package), "config", left_ur_type, "joint_limits.yaml"])
     left_physical_params = PathJoinSubstitution([FindPackageShare(description_package), "config", left_ur_type, "physical_parameters.yaml"])
     left_visual_params = PathJoinSubstitution([FindPackageShare(description_package), "config", left_ur_type, "visual_parameters.yaml"])
@@ -106,6 +112,12 @@ def launch_setup(context, *args, **kwargs):
     right_reverse_port = LaunchConfiguration("right_reverse_port")
     right_script_sender_port = LaunchConfiguration("right_script_sender_port")
     right_trajectory_port = LaunchConfiguration("right_trajectory_port")
+    right_translation_x = LaunchConfiguration("right_translation_x")
+    right_translation_y = LaunchConfiguration("right_translation_y")
+    right_translation_z = LaunchConfiguration("right_translation_z")
+    right_rotation_r = LaunchConfiguration("right_rotation_r")
+    right_rotation_p = LaunchConfiguration("right_rotation_p")
+    right_rotation_y = LaunchConfiguration("right_rotation_y")
     right_joint_limit_params = PathJoinSubstitution([FindPackageShare(description_package), "config", right_ur_type, "joint_limits.yaml"])
     right_physical_params = PathJoinSubstitution([FindPackageShare(description_package), "config", right_ur_type, "physical_parameters.yaml"])
     right_visual_params = PathJoinSubstitution([FindPackageShare(description_package), "config", right_ur_type, "visual_parameters.yaml"])
@@ -211,6 +223,24 @@ def launch_setup(context, *args, **kwargs):
             "left_trajectory_port:=",
             left_trajectory_port,
             " ",
+            "left_translation_x:=",
+            left_translation_x,
+            " ",
+            "left_translation_y:=",
+            left_translation_y,
+            " ",
+            "left_translation_z:=",
+            left_translation_z,
+            " ",
+            "left_rotation_r:=",
+            left_rotation_r,
+            " ",
+            "left_rotation_p:=",
+            left_rotation_p,
+            " ",
+            "left_rotation_y:=",
+            left_rotation_y,
+            " ",
             "right_robot_ip:=",
             right_robot_ip,
             " ",
@@ -294,6 +324,24 @@ def launch_setup(context, *args, **kwargs):
             " ",
             "right_trajectory_port:=",
             right_trajectory_port,
+            " ",
+            "right_translation_x:=",
+            right_translation_x,
+            " ",
+            "right_translation_y:=",
+            right_translation_y,
+            " ",
+            "right_translation_z:=",
+            right_translation_z,
+            " ",
+            "right_rotation_r:=",
+            right_rotation_r,
+            " ",
+            "right_rotation_p:=",
+            right_rotation_p,
+            " ",
+            "right_rotation_y:=",
+            right_rotation_y,
             " ",
         ]
     )
@@ -694,6 +742,48 @@ def generate_launch_description():
             description="Port that will be opened for trajectory control.",
         )
     )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "left_translation_x",
+            default_value="-0.331",
+            description="x coordinate of the left robot",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "left_translation_y",
+            default_value="0.529",
+            description="y coordinate of the left robot",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "left_translation_z",
+            default_value="0.006",
+            description="z coordinate of the left robot",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "left_rotation_r",
+            default_value="0.0",
+            description="Roll of the left robot in the world",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "left_rotation_p",
+            default_value="0.0",
+            description="Pitch of the left robot in the world",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "left_rotation_y",
+            default_value="1.570796",
+            description="Roll of the left robot in the world",
+        )
+    )
 
     # right robot arguments
     declared_arguments.append(
@@ -873,6 +963,48 @@ def generate_launch_description():
             "right_trajectory_port",
             default_value="60003",
             description="Port that will be opened for trajectory control.",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "right_translation_x",
+            default_value="0.587",
+            description="x coordinate of the right robot in the world",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "right_translation_y",
+            default_value="0.542",
+            description="y coordinate of the right robot in the world",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "right_translation_z",
+            default_value="0.001",
+            description="z coordinate of the right robot in the world",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "right_rotation_r",
+            default_value="0.0",
+            description="Roll of the right robot in the world",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "right_rotation_p",
+            default_value="0.0",
+            description="Pitch of the right robot in the world",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "right_rotation_y",
+            default_value="1.570796",
+            description="Yaw of the right robot in the world",
         )
     )
     

@@ -48,6 +48,12 @@
    <xacro:arg name="left_tool_tx_idle_chars" default="3.5" />
    <xacro:arg name="left_tool_device_name" default="/tmp/ttyUR" /> <!--there might be an issue here-->
    <xacro:arg name="left_tool_tcp_port" default="54321" />
+   <xacro:arg name="left_translation_x" default="-0.331" />
+   <xacro:arg name="left_translation_y" default="0.529" />
+   <xacro:arg name="left_translation_z" default="0.006" />
+   <xacro:arg name="left_rotation_r" default="0.0" />
+   <xacro:arg name="left_rotation_p" default="0.0" />
+   <xacro:arg name="left_rotation_y" default="1.570796" />
 
    <!-- RIGHT ROBOT parameters -->
    <xacro:arg name="right_ur_type" default="ur16e"/>
@@ -82,6 +88,12 @@
    <xacro:arg name="right_tool_tx_idle_chars" default="3.5" />
    <xacro:arg name="right_tool_device_name" default="/tmp/ttyUR" /> <!--there might be an issue here-->
    <xacro:arg name="right_tool_tcp_port" default="64321" />
+   <xacro:arg name="right_translation_x" default="0.587" />
+   <xacro:arg name="right_translation_y" default="0.542" />
+   <xacro:arg name="right_translation_z" default="0.001" />
+   <xacro:arg name="right_rotation_r" default="0.00" />
+   <xacro:arg name="right_rotation_p" default="0.00" />
+   <xacro:arg name="right_rotation_y" default="1.570796" />
 
    <!-- initial position for simulations (Fake Hardware, Gazebo, Ignition) -->
    <!-- optional properties, if you prefer the same pattern as the UR driver -->
@@ -162,7 +174,7 @@
      script_sender_port="$(arg left_script_sender_port)"
      trajectory_port="$(arg left_trajectory_port)"
      >
-     <origin xyz="-0.331 0.529 0.006" rpy="0.0 0.0 1.570796" />          <!-- position robot in the world -->
+     <origin xyz="$(arg left_translation_x) $(arg left_translation_y) $(arg left_translation_z)" rpy="$(arg left_rotation_r) $(arg left_rotation_p) $(arg left_rotation_y)" />          <!-- position robot in the world -->
    </xacro:ur_robot>
 
    <!-- right arm -->
@@ -206,7 +218,7 @@
      script_sender_port="$(arg right_script_sender_port)"
      trajectory_port="$(arg right_trajectory_port)"
      >
-     <origin xyz="0.587 0.542 0.001" rpy="-0.00 0.0 1.570796" />          <!-- position robot in the world -->
+     <origin xyz="$(arg right_translation_x) $(arg right_translation_y) $(arg right_translation_z)" rpy="$(arg right_rotation_r) $(arg right_rotation_p) $(arg right_rotation_y)" />          <!-- position robot in the world -->
    </xacro:ur_robot>
 
    <xacro:if value="$(arg sim_gazebo)">
