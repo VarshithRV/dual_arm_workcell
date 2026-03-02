@@ -1,0 +1,5 @@
+<!-- Left arm position in the world -->
+<origin xyz="-0.331 0.529 0.006" rpy="0.0 0.0 1.570796" />
+
+<!-- Right arm position in the world -->
+<origin xyz="0.587 0.542 0.001" rpy="-0.00 0.0 1.570796" />
