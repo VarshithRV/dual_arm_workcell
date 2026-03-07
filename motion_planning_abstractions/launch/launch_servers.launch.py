@@ -236,6 +236,26 @@ def launch_setup(context, *args, **kwargs):
         ],
     )
 
+    right_task_space_cubic_polynomial_trajectory_server = Node(
+        package="motion_planning_abstractions",
+        executable="task_space_cubic_polynomial_trajectory_server",
+        name="right_task_space_cubic_polynomial_trajectory_server",
+        output="screen",
+        parameters=[
+            robot_description_kinematics,
+            {
+                "planning_group": "right_ur16e",
+                "endeffector_link": "right_tool0",
+                "arm_side":"right",
+                "maximum_task_space_velocity":1.0, # in ms-1
+                "maximum_task_space_acceleration":3.0, # in ms-2
+                "maximum_joint_space_velocity":3.14, # in rads-1
+                "maximum_joint_space_acceleration":3.14, # in rads-2
+            },
+            {"use_sim_time":use_sim_time},
+        ],
+    )
+
     suction_pick_and_place_server = Node(
     package="motion_planning_abstractions",
     executable="pick_and_place_ft_feedback_server",
@@ -364,6 +384,7 @@ def launch_setup(context, *args, **kwargs):
     nodes_to_start = [
         left_pose_tracking_node,
         rws_pick_and_place_server,
+        right_task_space_cubic_polynomial_trajectory_server,
         suction_pick_and_place_server,
         left_preaction_server,
         right_preaction_server,

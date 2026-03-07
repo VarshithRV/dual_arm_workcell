@@ -28,6 +28,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   tf2_geometry_msgs
   trajectory_msgs
   ur_msgs
+  rosidl_runtime_cpp
 )
 
 # find dependencies
@@ -35,7 +36,6 @@ find_package(ament_cmake REQUIRED)
 find_package(controller_manager_msgs REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(control_toolbox REQUIRED)
-find_package( REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(motion_planning_abstractions_msgs REQUIRED)
 find_package(moveit_core REQUIRED)
@@ -55,6 +55,7 @@ find_package(tf2_eigen REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(ur_msgs REQUIRED)
+find_package(rosidl_runtime_cpp REQUIRED)
 
 # uncomment the following section in order to fill in
 # further dependencies manually.
@@ -91,7 +92,7 @@ DESTINATION lib/${PROJECT_NAME}
 
 add_executable(task_space_cubic_polynomial_trajectory_server src/task_space_cubic_polynomial_trajectory_server.cpp)
 ament_target_dependencies(task_space_cubic_polynomial_trajectory_server rclcpp geometry_msgs moveit_ros_planning_interface 
-moveit_core motion_planning_abstractions_msgs ur_msgs controller_manager_msgs std_srvs open_set_object_detection_msgs tf2 tf2_geometry_msgs)
+moveit_core motion_planning_abstractions_msgs ur_msgs controller_manager_msgs std_srvs open_set_object_detection_msgs tf2 tf2_geometry_msgs rosidl_runtime_cpp)
 install(TARGETS
 task_space_cubic_polynomial_trajectory_server
 DESTINATION lib/${PROJECT_NAME}
