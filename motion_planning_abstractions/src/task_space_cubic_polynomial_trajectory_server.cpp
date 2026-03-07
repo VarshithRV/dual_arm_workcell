@@ -11,15 +11,19 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/executors/multi_threaded_executor.hpp"
+
 #include "geometry_msgs/msg/pose.hpp"
-#include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/point.hpp"
+#include "geometry_msgs/msg/wrench.hpp"
+#include "geometry_msgs/msg/twist.hpp"
+
 #include "moveit/move_group_interface/move_group_interface.h"
 #include "moveit_msgs/msg/robot_trajectory.hpp"
 #include "rmw/qos_profiles.h"
 #include "std_srvs/srv/trigger.hpp"
-#include "geometry_msgs/msg/twist_stamped.hpp"
 #include "rosidl_runtime_cpp/traits.hpp"
+#include "Eigen/Dense"
+#include "Eigen/Geometry"
 
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -32,6 +36,13 @@ using moveit::planning_interface::MoveGroupInterface;
 class TSCubicPolynomialTraj
 {
 public:
+    struct trajPoint{
+        geometry_msgs::msg::Pose waypoint;
+        geometry_msgs::msg::Twist velocity;
+        geometry_msgs::msg::Twist acceleration;
+        double duration_from_start;
+    };
+
     TSCubicPolynomialTraj()
     {
         node_ = std::make_shared<rclcpp::Node>("ts_cubic_polnomial_traj_server");
@@ -83,6 +94,7 @@ public:
 
         rclcpp::sleep_for(3s);
 
+        // print shit
         auto planning_frame = this->move_group_interface_->getPlanningFrame();
         RCLCPP_INFO(node_->get_logger(), "Planning frame : %s", planning_frame.c_str());
 
@@ -92,9 +104,15 @@ public:
         auto current_pose = this->move_group_interface_->getCurrentPose(endeffector);
         RCLCPP_INFO(node_->get_logger(),"x : %f, y : %f, z : %f",current_pose.pose.position.x,current_pose.pose.position.y,current_pose.pose.position.z);
 
+        // servers
         callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-
         print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",std::bind(&TSCubicPolynomialTraj::print_state, this,std::placeholders::_1, std::placeholders::_2),rmw_qos_profile_services_default,callback_group_);
+        test_server_ = node_->create_service<std_srvs::srv::Trigger>("~/test_server",
+            [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
+                res->success = test_server_callback_();
+                return;
+            }
+        );
 
         thread_ = std::thread([this](){moveit_executor_->spin();});
         executor_->spin();
@@ -145,6 +163,212 @@ public:
         return true;
     }
 
+    // get_coeffs_ function for the cubic polynomial given time, initial_conditions and final_conditions for one axes at a time
+    Eigen::Vector<double,4> get_coeffs_(Eigen::Vector2d initial_conditions, Eigen::Vector2d final_conditions, double duration){ // conditions are in format [p_;v_]
+        Eigen::Vector<double,4> conditions;
+        conditions << initial_conditions,final_conditions;
+        Eigen::Matrix<double,4,4> A;
+        double t = duration;
+        A <<
+            1.0,0.0,0.0,0.0,
+            0.0,1.0,0.0,0.0,
+            1.0,t,std::pow(t,2),std::pow(t,3),
+            0.0,1,2*t,3*pow(t,2);
+        return A.colPivHouseholderQr().solve(conditions); 
+    }
+
+    // w_in can have R6 space
+    // w_f can have R6 space
+    // v_in can have R3 in translation but 0 in rotation
+    // v_f can have R3 in translation but 0 in rotation
+    std::vector<TSCubicPolynomialTraj::trajPoint> generate_trajectory_(
+        geometry_msgs::msg::Pose w_in, geometry_msgs::msg::Twist v_in, 
+        geometry_msgs::msg::Pose w_f, geometry_msgs::msg::Twist v_f, double duration
+    ){
+        std::vector<TSCubicPolynomialTraj::trajPoint> trajectory_msg; // initialize a trajectory message
+        
+        int size;
+        if(duration*10 - int(duration*10)!=0)
+            size = duration*10 + 2;
+        else
+            size = duration*10 + 1;
+            
+        // init point,velocity,acceleration
+        double timesteps[size];
+        double x[size]={0};
+        double y[size]={0};
+        double z[size]={0};
+        double theta[size]={0}; //angular displacement
+        double dx[size]={0};
+        double dy[size]={0};
+        double dz[size]={0};
+        double dtheta[size]={0}; //angular velocity
+        double ddx[size]={0};
+        double ddy[size]={0};
+        double ddz[size]={0};
+        double ddtheta[size]={0}; //angular acceleration
+        Eigen::Vector3d a_cap; //axis of rotation
+
+        // make timesteps
+        for(int i=0; i<size; i++){
+            if(i<size-1)
+                timesteps[i] = i*0.1;
+            else
+                timesteps[i] = duration;
+        }
+
+        // get the rotations stuff
+        Eigen::Quaterniond q_in(w_in.orientation.w,w_in.orientation.x,w_in.orientation.y,w_in.orientation.z);
+        Eigen::Quaterniond q_f(w_f.orientation.w,w_f.orientation.x,w_f.orientation.y,w_f.orientation.z);
+
+        q_in.normalize();
+        q_f.normalize();
+        if (q_in.dot(q_f) < 0.0) {
+            q_f.coeffs() *= -1.0;
+        }
+
+        Eigen::Quaternion q_d = q_f * q_in.inverse();
+        Eigen::AngleAxisd angleaxisd(q_d);
+        double theta_f = angleaxisd.angle();
+        a_cap = angleaxisd.axis();
+
+        if(std::abs(theta_f) < 1e-8){
+            a_cap = Eigen::Vector3d::UnitX();
+            theta_f = 0.0;
+        } 
+        else{
+            a_cap = angleaxisd.axis();
+        }
+
+        Eigen::Vector2d x_initial_conditions(w_in.position.x,v_in.linear.x);
+        Eigen::Vector2d x_final_conditions(w_f.position.x,v_f.linear.x);
+        Eigen::Vector4d x_coeffs = get_coeffs_(x_initial_conditions,x_final_conditions,duration);
+        
+        Eigen::Vector2d y_initial_conditions(w_in.position.y,v_in.linear.y);
+        Eigen::Vector2d y_final_conditions(w_f.position.y,v_f.linear.y);
+        Eigen::Vector4d y_coeffs = get_coeffs_(y_initial_conditions,y_final_conditions,duration);
+        
+        Eigen::Vector2d z_initial_conditions(w_in.position.z,v_in.linear.z);
+        Eigen::Vector2d z_final_conditions(w_f.position.z,v_f.linear.z);
+        Eigen::Vector4d z_coeffs = get_coeffs_(z_initial_conditions,z_final_conditions,duration);
+        
+        Eigen::Vector2d theta_initial_conditions(0,0);
+        Eigen::Vector2d theta_final_conditions(theta_f,0);
+        Eigen::Vector4d theta_coeffs = get_coeffs_(theta_initial_conditions,theta_final_conditions,duration);
+        
+        Eigen::Quaterniond current_orientation(q_in);
+        current_orientation.normalize();
+
+        for(int i=0; i <size; i++){
+
+            // positions
+            x[i] = x_coeffs[0] + x_coeffs[1]*timesteps[i] + x_coeffs[2]*pow(timesteps[i],2) + x_coeffs[3]*pow(timesteps[i],3);
+            y[i] = y_coeffs[0] + y_coeffs[1]*timesteps[i] + y_coeffs[2]*pow(timesteps[i],2) + y_coeffs[3]*pow(timesteps[i],3);
+            z[i] = z_coeffs[0] + z_coeffs[1]*timesteps[i] + z_coeffs[2]*pow(timesteps[i],2) + z_coeffs[3]*pow(timesteps[i],3);
+            theta[i] = theta_coeffs[0] + theta_coeffs[1]*timesteps[i] + theta_coeffs[2]*pow(timesteps[i],2) + theta_coeffs[3]*pow(timesteps[i],3);
+
+            // velocities
+            dx[i] = x_coeffs[1] + 2*x_coeffs[2]*timesteps[i] + 3*x_coeffs[3]*pow(timesteps[i],2);
+            dy[i] = y_coeffs[1] + 2*y_coeffs[2]*timesteps[i] + 3*y_coeffs[3]*pow(timesteps[i],2);
+            dz[i] = z_coeffs[1] + 2*z_coeffs[2]*timesteps[i] + 3*z_coeffs[3]*pow(timesteps[i],2);
+            dtheta[i] = theta_coeffs[1] + 2*theta_coeffs[2]*timesteps[i] + 3*theta_coeffs[3]*pow(timesteps[i],2);
+            
+            // accelerations
+            ddx[i] = 2*x_coeffs[2] + 6*x_coeffs[3]*timesteps[i];
+            ddy[i] = 2*y_coeffs[2] + 6*y_coeffs[3]*timesteps[i];
+            ddz[i] = 2*z_coeffs[2] + 6*z_coeffs[3]*timesteps[i];
+            ddtheta[i] = 2*theta_coeffs[2] + 6*theta_coeffs[3]*timesteps[i];
+            
+            current_orientation = Eigen::Quaterniond(Eigen::AngleAxisd(theta[i],a_cap)) * q_in;
+            current_orientation.normalize();
+            
+            trajPoint point;
+            point.waypoint.position.x = x[i];
+            point.waypoint.position.y = y[i];
+            point.waypoint.position.z = z[i];
+            point.waypoint.orientation.w = current_orientation.w();
+            point.waypoint.orientation.x = current_orientation.x();
+            point.waypoint.orientation.y = current_orientation.y();
+            point.waypoint.orientation.z = current_orientation.z();
+
+            point.velocity.linear.x = dx[i];
+            point.velocity.linear.y = dy[i];
+            point.velocity.linear.z = dz[i];
+            point.velocity.angular.x = dtheta[i]*a_cap[0];
+            point.velocity.angular.y = dtheta[i]*a_cap[1];
+            point.velocity.angular.z = dtheta[i]*a_cap[2];
+
+            point.acceleration.linear.x = ddx[i];
+            point.acceleration.linear.y = ddy[i];
+            point.acceleration.linear.z = ddz[i];
+            point.acceleration.angular.x = ddtheta[i]*a_cap[0];
+            point.acceleration.angular.y = ddtheta[i]*a_cap[1];
+            point.acceleration.angular.z = ddtheta[i]*a_cap[2];
+
+            point.duration_from_start = timesteps[i];
+
+            trajectory_msg.push_back(point);
+        }
+
+        return trajectory_msg;
+    }
+
+    // TEST SERVER CALLBACK HERE
+    bool test_server_callback_(){
+        RCLCPP_INFO(node_->get_logger(),"Entered test service");
+        
+        geometry_msgs::msg::Pose w_in,w_f;
+        geometry_msgs::msg::Twist v_in,v_f;
+        
+        w_in.position.x = 0.1;
+        w_f.position.x = 1.0;
+        double duration = 0.55;
+
+        std::vector<TSCubicPolynomialTraj::trajPoint> trajectory =  generate_trajectory_(w_in,v_in,w_f,v_f,duration);
+        for(TSCubicPolynomialTraj::trajPoint point :trajectory){
+            RCLCPP_INFO(
+                node_->get_logger(),
+                "t=%.3f | "
+                "pos [%.4f %.4f %.4f] | "
+                "quat [%.4f %.4f %.4f %.4f] | "
+                "lin vel [%.4f %.4f %.4f] | "
+                "ang vel [%.4f %.4f %.4f] | "
+                "lin acc [%.4f %.4f %.4f] | "
+                "ang acc [%.4f %.4f %.4f]",
+
+                point.duration_from_start,
+            
+                point.waypoint.position.x,
+                point.waypoint.position.y,
+                point.waypoint.position.z,
+            
+                point.waypoint.orientation.w,
+                point.waypoint.orientation.x,
+                point.waypoint.orientation.y,
+                point.waypoint.orientation.z,
+            
+                point.velocity.linear.x,
+                point.velocity.linear.y,
+                point.velocity.linear.z,
+            
+                point.velocity.angular.x,
+                point.velocity.angular.y,
+                point.velocity.angular.z,
+            
+                point.acceleration.linear.x,
+                point.acceleration.linear.y,
+                point.acceleration.linear.z,
+            
+                point.acceleration.angular.x,
+                point.acceleration.angular.y,
+                point.acceleration.angular.z
+            );
+        }
+            
+
+        return true;
+    }
+
     void print_state(const std_srvs::srv::Trigger::Request::SharedPtr request,std_srvs::srv::Trigger::Response::SharedPtr response){
         auto current_state = move_group_interface_->getCurrentState();
         (void)current_state;
@@ -182,15 +406,29 @@ public:
 
 private:
     std::thread thread_;
+    
     std::shared_ptr<MoveGroupInterface> move_group_interface_;
     rclcpp::Node::SharedPtr node_;
     rclcpp::Node::SharedPtr moveit_node_;
+    
     rclcpp::executors::MultiThreadedExecutor::SharedPtr executor_;
     rclcpp::executors::SingleThreadedExecutor::SharedPtr moveit_executor_;
-    rclcpp::CallbackGroup::SharedPtr callback_group_;
-    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_state_server_;
-    rclcpp::Clock system_clock_;
     
+    rclcpp::CallbackGroup::SharedPtr callback_group_;
+    
+    rclcpp::Clock system_clock_;
+
+    // servers
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_state_server_;
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr test_server_;
+
+    // clients
+
+    // publishers
+
+    // subscribers
+    
+    // parameters and data
     std::string arm_side;
     std::string joint_trajectory_controller_;
     std::string planning_group_;
@@ -204,9 +442,7 @@ private:
 int main(int argc, char *argv[])
 {
     rclcpp::init(argc, argv);
-
     auto moveit_example = TSCubicPolynomialTraj();
-
     rclcpp::shutdown();
     return 0;
 }
