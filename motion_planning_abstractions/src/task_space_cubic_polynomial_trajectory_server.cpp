@@ -113,6 +113,12 @@ public:
                 return;
             }
         );
+        print_latest_trajectory_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_latest_trajectory",
+            [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
+                res->success = print_latest_trajectory_server_callback_();
+                return;
+            }
+        );
 
         thread_ = std::thread([this](){moveit_executor_->spin();});
         executor_->spin();
@@ -181,17 +187,18 @@ public:
     // w_f can have R6 space
     // v_in can have R3 in translation but 0 in rotation
     // v_f can have R3 in translation but 0 in rotation
+    // dt should be small
     std::vector<TSCubicPolynomialTraj::trajPoint> generate_trajectory_(
         geometry_msgs::msg::Pose w_in, geometry_msgs::msg::Twist v_in, 
-        geometry_msgs::msg::Pose w_f, geometry_msgs::msg::Twist v_f, double duration
+        geometry_msgs::msg::Pose w_f, geometry_msgs::msg::Twist v_f, double duration, double dt
     ){
         std::vector<TSCubicPolynomialTraj::trajPoint> trajectory_msg; // initialize a trajectory message
         
         int size;
-        if(duration*10 - int(duration*10)!=0)
-            size = duration*10 + 2;
+        if(duration/dt - int(duration/dt)!=0)
+            size = duration/dt + 2;
         else
-            size = duration*10 + 1;
+            size = duration/dt + 1;
             
         // init point,velocity,acceleration
         double timesteps[size];
@@ -212,7 +219,7 @@ public:
         // make timesteps
         for(int i=0; i<size; i++){
             if(i<size-1)
-                timesteps[i] = i*0.1;
+                timesteps[i] = i*dt;
             else
                 timesteps[i] = duration;
         }
@@ -223,7 +230,7 @@ public:
 
         q_in.normalize();
         q_f.normalize();
-        if (q_in.dot(q_f) < 0.0) {
+        if(q_in.dot(q_f) < 0.0){
             q_f.coeffs() *= -1.0;
         }
 
@@ -322,9 +329,22 @@ public:
         
         w_in.position.x = 0.1;
         w_f.position.x = 1.0;
+        w_in.position.y = -0.5;
+        w_f.position.y = -0.1;
+        w_in.position.z = 0.0;
+        w_f.position.z = 0.1;
+        v_f.linear.x = 0.1;
+        v_f.linear.z = 0.5;
+        w_in.orientation.w = 1;
+        w_in.orientation.x = 1;
         double duration = 0.55;
+        double dt = 0.05;
 
-        std::vector<TSCubicPolynomialTraj::trajPoint> trajectory =  generate_trajectory_(w_in,v_in,w_f,v_f,duration);
+        std::vector<TSCubicPolynomialTraj::trajPoint> trajectory =  generate_trajectory_(w_in,v_in,w_f,v_f,duration,dt);
+        if(this->latest_trajectory_ == nullptr){
+            latest_trajectory_ = std::make_shared<std::vector<TSCubicPolynomialTraj::trajPoint>>();
+        }
+        *latest_trajectory_ = trajectory;
         for(TSCubicPolynomialTraj::trajPoint point :trajectory){
             RCLCPP_INFO(
                 node_->get_logger(),
@@ -364,8 +384,55 @@ public:
                 point.acceleration.angular.z
             );
         }
+        RCLCPP_INFO(node_->get_logger(),"Size of the trajectory message : %d",trajectory.size());
             
 
+        return true;
+    }
+
+    bool print_latest_trajectory_server_callback_(){
+        
+        
+        for(TSCubicPolynomialTraj::trajPoint point :*latest_trajectory_){
+            RCLCPP_INFO(
+                node_->get_logger(),
+                "t=%.3f | "
+                "pos [%.4f %.4f %.4f] | "
+                "quat [%.4f %.4f %.4f %.4f] | "
+                "lin vel [%.4f %.4f %.4f] | "
+                "ang vel [%.4f %.4f %.4f] | "
+                "lin acc [%.4f %.4f %.4f] | "
+                "ang acc [%.4f %.4f %.4f]",
+
+                point.duration_from_start,
+            
+                point.waypoint.position.x,
+                point.waypoint.position.y,
+                point.waypoint.position.z,
+            
+                point.waypoint.orientation.w,
+                point.waypoint.orientation.x,
+                point.waypoint.orientation.y,
+                point.waypoint.orientation.z,
+            
+                point.velocity.linear.x,
+                point.velocity.linear.y,
+                point.velocity.linear.z,
+            
+                point.velocity.angular.x,
+                point.velocity.angular.y,
+                point.velocity.angular.z,
+            
+                point.acceleration.linear.x,
+                point.acceleration.linear.y,
+                point.acceleration.linear.z,
+            
+                point.acceleration.angular.x,
+                point.acceleration.angular.y,
+                point.acceleration.angular.z
+            );
+        }
+        RCLCPP_INFO(node_->get_logger(),"Size of the trajectory message : %d",latest_trajectory_->size());
         return true;
     }
 
@@ -421,6 +488,7 @@ private:
     // servers
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_state_server_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr test_server_;
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_latest_trajectory_server_;
 
     // clients
 
@@ -437,6 +505,7 @@ private:
     double maximum_task_space_acceleration_;
     double maximum_joint_space_velocity_;
     double maximum_joint_space_acceleration_;
+    std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>> latest_trajectory_;
 };
 
 int main(int argc, char *argv[])
