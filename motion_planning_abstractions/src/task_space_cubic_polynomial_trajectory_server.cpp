@@ -320,6 +320,122 @@ public:
         return trajectory_msg;
     }
 
+    // provide a vector of poses are waypoints and a vector of doubles that give the velocity magnitudes at the corresponding waypoints in ms-1
+    // provide the starting and ending velocity as 0.0, if not given, will be enforced anyways
+    // if the lengths of the two vectors are different, then it will fail
+    std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>>
+    waypointPlanning(std::vector<geometry_msgs::msg::Pose> waypoints,std::vector<double> waypoint_velocities){
+        if (waypoints.size() != waypoint_velocities.size() || waypoints.empty()) {
+            return nullptr;
+        }
+    
+        std::vector<Eigen::Vector3d> waypoints_positions;
+        std::vector<Eigen::Quaterniond> waypoints_orientations;
+    
+        for (const geometry_msgs::msg::Pose& waypoint : waypoints) {
+            waypoints_positions.push_back(
+                Eigen::Vector3d(waypoint.position.x, waypoint.position.y, waypoint.position.z));
+            waypoints_orientations.push_back(
+                Eigen::Quaterniond(waypoint.orientation.w, waypoint.orientation.x,
+                                   waypoint.orientation.y, waypoint.orientation.z));
+        }
+    
+        auto trajectory = std::make_shared<std::vector<TSCubicPolynomialTraj::trajPoint>>();
+        std::vector<Eigen::Vector3d> waypoint_velocity_vectors;
+        std::vector<double> durations;
+    
+        waypoint_velocities.front() = 0.0;
+        waypoint_velocities.back() = 0.0;
+    
+        for (int i = 0; i < static_cast<int>(waypoints.size()); ++i) {
+            if (i == 0 || i == static_cast<int>(waypoints.size()) - 1) {
+                waypoint_velocity_vectors.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+            } else {
+                Eigen::Vector3d velocity_direction = waypoints_positions[i + 1] - waypoints_positions[i - 1];
+                if (velocity_direction.norm() > 1e-9) {
+                    waypoint_velocity_vectors.push_back(
+                        (velocity_direction / velocity_direction.norm()) * waypoint_velocities[i]);
+                } else {
+                    waypoint_velocity_vectors.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+                }
+            }
+        }
+    
+        for (int i = 0; i < static_cast<int>(waypoints.size()) - 1; ++i) {
+            Eigen::Vector3d displacement = waypoints_positions[i + 1] - waypoints_positions[i];
+            durations.push_back(displacement.norm() / average_velocity_);
+        }
+        durations.push_back(0.0);
+
+        // generate trajectories for the segments and return
+        double cumulative_time = 0.0;
+
+        for (int i = 0; i < static_cast<int>(waypoints_positions.size()) - 1; ++i) {
+            geometry_msgs::msg::Pose w_in;
+            w_in.position.x = waypoints_positions[i][0];
+            w_in.position.y = waypoints_positions[i][1];
+            w_in.position.z = waypoints_positions[i][2];
+            w_in.orientation.x = waypoints_orientations[i].x();
+            w_in.orientation.y = waypoints_orientations[i].y();
+            w_in.orientation.z = waypoints_orientations[i].z();
+            w_in.orientation.w = waypoints_orientations[i].w();
+        
+            geometry_msgs::msg::Pose w_f;
+            w_f.position.x = waypoints_positions[i + 1][0];
+            w_f.position.y = waypoints_positions[i + 1][1];
+            w_f.position.z = waypoints_positions[i + 1][2];
+            w_f.orientation.x = waypoints_orientations[i + 1].x();
+            w_f.orientation.y = waypoints_orientations[i + 1].y();
+            w_f.orientation.z = waypoints_orientations[i + 1].z();
+            w_f.orientation.w = waypoints_orientations[i + 1].w();
+        
+            geometry_msgs::msg::Twist v_in;
+            v_in.linear.x = waypoint_velocity_vectors[i][0];
+            v_in.linear.y = waypoint_velocity_vectors[i][1];
+            v_in.linear.z = waypoint_velocity_vectors[i][2];
+            v_in.angular.x = 0.0;
+            v_in.angular.y = 0.0;
+            v_in.angular.z = 0.0;
+        
+            geometry_msgs::msg::Twist v_f;
+            v_f.linear.x = waypoint_velocity_vectors[i + 1][0];
+            v_f.linear.y = waypoint_velocity_vectors[i + 1][1];
+            v_f.linear.z = waypoint_velocity_vectors[i + 1][2];
+            v_f.angular.x = 0.0;
+            v_f.angular.y = 0.0;
+            v_f.angular.z = 0.0;
+        
+            double duration = durations[i];
+        
+            if (duration <= 1e-9) {
+                continue;
+            }
+        
+            auto dtrajectory = generate_trajectory_(w_in, v_in, w_f, v_f, duration, dt_);
+        
+            if (dtrajectory.empty()) {
+                RCLCPP_WARN(node_->get_logger(),
+                            "Segment %d trajectory generation failed or returned empty trajectory",
+                            i);
+                return nullptr;
+            }
+        
+            const std::size_t start_idx = (i == 0) ? 0 : 1;
+        
+            for (std::size_t j = start_idx; j < dtrajectory.size(); ++j) {
+                TSCubicPolynomialTraj::trajPoint point = (dtrajectory)[j];
+            
+                point.duration_from_start += cumulative_time;
+                trajectory->push_back(point);
+            }
+        
+            cumulative_time += duration;
+        }
+
+        latest_trajectory_ = trajectory;
+        return trajectory;
+    }
+    
     // TEST SERVER CALLBACK HERE
     bool test_server_callback_(){
         RCLCPP_INFO(node_->get_logger(),"Entered test service");
@@ -345,47 +461,17 @@ public:
             latest_trajectory_ = std::make_shared<std::vector<TSCubicPolynomialTraj::trajPoint>>();
         }
         *latest_trajectory_ = trajectory;
-        for(TSCubicPolynomialTraj::trajPoint point :trajectory){
-            RCLCPP_INFO(
-                node_->get_logger(),
-                "t=%.3f | "
-                "pos [%.4f %.4f %.4f] | "
-                "quat [%.4f %.4f %.4f %.4f] | "
-                "lin vel [%.4f %.4f %.4f] | "
-                "ang vel [%.4f %.4f %.4f] | "
-                "lin acc [%.4f %.4f %.4f] | "
-                "ang acc [%.4f %.4f %.4f]",
 
-                point.duration_from_start,
-            
-                point.waypoint.position.x,
-                point.waypoint.position.y,
-                point.waypoint.position.z,
-            
-                point.waypoint.orientation.w,
-                point.waypoint.orientation.x,
-                point.waypoint.orientation.y,
-                point.waypoint.orientation.z,
-            
-                point.velocity.linear.x,
-                point.velocity.linear.y,
-                point.velocity.linear.z,
-            
-                point.velocity.angular.x,
-                point.velocity.angular.y,
-                point.velocity.angular.z,
-            
-                point.acceleration.linear.x,
-                point.acceleration.linear.y,
-                point.acceleration.linear.z,
-            
-                point.acceleration.angular.x,
-                point.acceleration.angular.y,
-                point.acceleration.angular.z
-            );
-        }
-        RCLCPP_INFO(node_->get_logger(),"Size of the trajectory message : %d",trajectory.size());
-            
+        geometry_msgs::msg::Pose wp1,wp2,wp3,wp4;
+        wp1.position.x=0.1;
+        wp2.position.y=1.2;
+        wp3.position.z=0.3;
+        wp4.position.x=0.5;
+        wp1.orientation.w=1;
+        wp1.orientation.w=1;
+        wp1.orientation.w=1;
+        wp1.orientation.w=1;
+        waypointPlanning(std::vector<geometry_msgs::msg::Pose>{wp1,wp2,wp3,wp4},std::vector<double>{0.0,0.1,0.2,0.0});
 
         return true;
     }
@@ -501,11 +587,13 @@ private:
     std::string joint_trajectory_controller_;
     std::string planning_group_;
     std::string endeffector_link_;
-    double maximum_task_space_velocity_;
-    double maximum_task_space_acceleration_;
-    double maximum_joint_space_velocity_;
-    double maximum_joint_space_acceleration_;
+    double maximum_task_space_velocity_; // not in use right now
+    double maximum_task_space_acceleration_; // not in use right now
+    double maximum_joint_space_velocity_; // not in use right now
+    double maximum_joint_space_acceleration_; // not in use right now
     std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>> latest_trajectory_;
+    double average_velocity_=0.5; // change this to make pt to pt traj faster or slower by making this bigger or smaller
+    double dt_=0.05; //trajectory interval
 };
 
 int main(int argc, char *argv[])
