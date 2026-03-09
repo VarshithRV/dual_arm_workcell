@@ -71,13 +71,13 @@ public:
         node_ = std::make_shared<rclcpp::Node>("ts_cubic_polnomial_traj_server");
 
         // parameter declaration
-        node_->declare_parameter<std::string>("planning_group", "left_ur16e");
+        node_->declare_parameter<std::string>("planning_group", "right_ur16e");
         node_->declare_parameter<double>("maximum_task_space_velocity",1.0); // in ms-1
         node_->declare_parameter<double>("maximum_task_space_acceleration",3.0); // in ms-2
         node_->declare_parameter<double>("maximum_joint_space_velocity",M_PI); // in rads-1
         node_->declare_parameter<double>("maximum_joint_space_acceleration",M_PI); // in rads-2
-        node_->declare_parameter<std::string>("arm_side", "left");
-        node_->declare_parameter<std::string>("joint_trajectory_controller", "left_scaled_joint_trajectory_controller");
+        node_->declare_parameter<std::string>("arm_side", "right");
+        node_->declare_parameter<std::string>("joint_trajectory_controller", "right_scaled_joint_trajectory_controller");
         node_->declare_parameter<std::string>("endeffector_link", "right_tool0");
         
         // parameter assignment
@@ -355,11 +355,11 @@ public:
     }
 
 
-    // given a std::vector<TSCubicPolynomialTraj::trajPoint> ts_trajectory
-    // generate a std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint> js_trajectory
     std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>> generate_js_traj(
     std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>>& task_space_trajectory)
     {
+        RCLCPP_INFO(node_->get_logger(), "generate_js_traj: entered");
+
         if (task_space_trajectory == nullptr || task_space_trajectory->empty()) {
             RCLCPP_ERROR(node_->get_logger(), "Task space trajectory is null or empty");
             return nullptr;
@@ -380,6 +380,12 @@ public:
             return nullptr;
         }
 
+        const moveit::core::LinkModel* ee_link_model = robot_state->getLinkModel(endeffector_link_);
+        if (!ee_link_model) {
+            RCLCPP_ERROR(node_->get_logger(), "Failed to get end-effector link model: %s", endeffector_link_.c_str());
+            return nullptr;
+        }
+
         std::vector<double> seed_joint_values;
         robot_state->copyJointGroupPositions(joint_model_group, seed_joint_values);
 
@@ -394,6 +400,16 @@ public:
 
         const double lambda = 1e-3;
         const double ik_timeout = 0.02;
+
+        auto wrap_to_pi = [](double angle) -> double {
+            return std::atan2(std::sin(angle), std::cos(angle));
+        };
+
+        auto unwrap_to_nearest = [&](const std::vector<double>& reference, std::vector<double>& candidate) {
+            for (std::size_t j = 0; j < candidate.size(); ++j) {
+                candidate[j] = reference[j] + wrap_to_pi(candidate[j] - reference[j]);
+            }
+        };
 
         for (std::size_t i = 0; i < task_space_trajectory->size(); ++i) {
             const auto& ts_point = task_space_trajectory->at(i);
@@ -425,11 +441,19 @@ public:
                 return nullptr;
             }
 
+            unwrap_to_nearest(seed_joint_values, joint_positions);
+            robot_state->setJointGroupPositions(joint_model_group, joint_positions);
+            robot_state->update();
+
             Eigen::MatrixXd J;
-            bool jacobian_ok = robot_state->getJacobian(joint_model_group,robot_state->getLinkModel(endeffector_link_),Eigen::Vector3d::Zero(),J);
+            bool jacobian_ok = robot_state->getJacobian(
+                joint_model_group,
+                ee_link_model,
+                Eigen::Vector3d::Zero(),
+                J);
 
             if (!jacobian_ok) {
-                RCLCPP_ERROR(node_->get_logger(), "Failed to compute Jacobian");
+                RCLCPP_ERROR(node_->get_logger(), "Failed to compute Jacobian at point %zu", i);
                 return nullptr;
             }
 
@@ -451,15 +475,39 @@ public:
                      ts_point.velocity.angular.y,
                      ts_point.velocity.angular.z;
 
+            if (!J.allFinite() || !twist.allFinite()) {
+                RCLCPP_ERROR(node_->get_logger(), "Non-finite Jacobian or twist at point %zu", i);
+                return nullptr;
+            }
+
             Eigen::Matrix<double, 6, 6> I = Eigen::Matrix<double, 6, 6>::Identity();
-            Eigen::Matrix<double, 6, 6> damped_pinv = J.transpose() * (J * J.transpose() + (lambda * lambda) * I).inverse();
-            Eigen::Matrix<double, 6, 1> joint_velocities = damped_pinv * twist;
+            Eigen::Matrix<double, 6, 6> A = J * J.transpose() + (lambda * lambda) * I;
+
+            Eigen::LDLT<Eigen::Matrix<double, 6, 6>> ldlt(A);
+            if (ldlt.info() != Eigen::Success) {
+                RCLCPP_ERROR(node_->get_logger(), "LDLT decomposition failed at point %zu", i);
+                return nullptr;
+            }
+
+            Eigen::Matrix<double, 6, 1> joint_velocities = J.transpose() * ldlt.solve(twist);
+
+            if (!joint_velocities.allFinite()) {
+                RCLCPP_ERROR(node_->get_logger(), "Non-finite joint velocities at point %zu", i);
+                return nullptr;
+            }
 
             for (int j = 0; j < 6; ++j) {
+                double unclipped = joint_velocities[j];
                 if (joint_velocities[j] > maximum_joint_space_velocity_) {
                     joint_velocities[j] = maximum_joint_space_velocity_;
+                    RCLCPP_WARN(node_->get_logger(),
+                                "Joint %d velocity clipped at point %zu: %.4f -> %.4f",
+                                j + 1, i, unclipped, joint_velocities[j]);
                 } else if (joint_velocities[j] < -maximum_joint_space_velocity_) {
                     joint_velocities[j] = -maximum_joint_space_velocity_;
+                    RCLCPP_WARN(node_->get_logger(),
+                                "Joint %d velocity clipped at point %zu: %.4f -> %.4f",
+                                j + 1, i, unclipped, joint_velocities[j]);
                 }
             }
 
@@ -861,7 +909,7 @@ private:
     double maximum_joint_space_acceleration_; // not in use right now
     std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>> latest_trajectory_;
     std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>> latest_joint_space_trajectory_;
-    double average_velocity_=0.5; // change this to make pt to pt traj faster or slower by making this bigger or smaller
+    double average_velocity_=0.3; // change this to make pt to pt traj faster or slower by making this bigger or smaller
     double dt_=0.05; //trajectory interval
 };
 
