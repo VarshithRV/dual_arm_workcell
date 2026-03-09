@@ -384,14 +384,14 @@ def launch_setup(context, *args, **kwargs):
     )
 
     nodes_to_start = [
-        left_pose_tracking_node,
-        rws_pick_and_place_server,
+        # left_pose_tracking_node,
+        # rws_pick_and_place_server,
         right_task_space_cubic_polynomial_trajectory_server,
-        suction_pick_and_place_server,
-        left_preaction_server,
-        right_preaction_server,
-        left_rest_server,
-        right_rest_server,
+        # suction_pick_and_place_server,
+        # left_preaction_server,
+        # right_preaction_server,
+        # left_rest_server,
+        # right_rest_server,
     ]
     
     return nodes_to_start

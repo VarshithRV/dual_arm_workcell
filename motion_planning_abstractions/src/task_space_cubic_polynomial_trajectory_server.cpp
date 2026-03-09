@@ -60,6 +60,10 @@ public:
 
     TSCubicPolynomialTraj()
     {
+        // rclcpp::NodeOptions node_options;
+        // node_options.automatically_declare_parameters_from_overrides(true);
+        // node_options.use_global_arguments(false);
+
         node_ = std::make_shared<rclcpp::Node>("ts_cubic_polnomial_traj_server");
 
         // parameter declaration
@@ -84,15 +88,8 @@ public:
 
         system_clock_ = rclcpp::Clock(RCL_SYSTEM_TIME);
         
-        // moveit node shit
-        rclcpp::NodeOptions node_options;
-        node_options.automatically_declare_parameters_from_overrides(true);
-        node_options.use_global_arguments(false);
-        std::string moveit_node_name = std::string(node_->get_name()) + "_moveit";
-        moveit_node_ = std::make_shared<rclcpp::Node>(moveit_node_name, node_options);
-        
         // move group interface shit
-        move_group_interface_ = std::make_shared<MoveGroupInterface>(moveit_node_, planning_group_);
+        move_group_interface_ = std::make_shared<MoveGroupInterface>(node_, planning_group_);
         move_group_interface_->setEndEffectorLink(endeffector_link_);
         move_group_interface_->setPlanningTime(10.0);
         move_group_interface_->setNumPlanningAttempts(15);
@@ -104,8 +101,6 @@ public:
         // more node shit
         executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
         executor_->add_node(node_);
-        moveit_executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
-        moveit_executor_->add_node(moveit_node_);
 
         rclcpp::sleep_for(3s);
 
@@ -140,8 +135,7 @@ public:
                 return;
             }
         );
-
-        thread_ = std::thread([this](){moveit_executor_->spin();});
+        
         executor_->spin();
     }
 
@@ -747,7 +741,6 @@ private:
     
     std::shared_ptr<MoveGroupInterface> move_group_interface_;
     rclcpp::Node::SharedPtr node_;
-    rclcpp::Node::SharedPtr moveit_node_;
     
     rclcpp::executors::MultiThreadedExecutor::SharedPtr executor_;
     rclcpp::executors::SingleThreadedExecutor::SharedPtr moveit_executor_;
