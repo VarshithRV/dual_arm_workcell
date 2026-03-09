@@ -242,6 +242,8 @@ def launch_setup(context, *args, **kwargs):
         name="right_task_space_cubic_polynomial_trajectory_server",
         output="screen",
         parameters=[
+            robot_description,
+            robot_description_semantic,
             robot_description_kinematics,
             {
                 "planning_group": "right_ur16e",
