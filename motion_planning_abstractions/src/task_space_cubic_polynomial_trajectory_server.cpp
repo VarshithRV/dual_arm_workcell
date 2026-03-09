@@ -25,6 +25,10 @@
 #include "Eigen/Dense"
 #include "Eigen/Geometry"
 
+#include <moveit/robot_model_loader/robot_model_loader.h>
+#include <moveit/robot_model/robot_model.h>
+#include <moveit/robot_state/robot_state.h>
+
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
@@ -114,6 +118,21 @@ public:
         auto current_pose = this->move_group_interface_->getCurrentPose(endeffector);
         RCLCPP_INFO(node_->get_logger(),"x : %f, y : %f, z : %f",current_pose.pose.position.x,current_pose.pose.position.y,current_pose.pose.position.z);
 
+        // robot model stuff for fk,ik and jacobian
+        robot_model_loader::RobotModelLoader robot_model_loader(node_);
+        kinematic_model_ = robot_model_loader.getModel();
+        RCLCPP_INFO(node_->get_logger(),"Kinematic model loaded,model frame : %s",kinematic_model_->getModelFrame().c_str());
+        
+        current_robot_state_=std::make_shared<moveit::core::RobotState>(kinematic_model_); // ? don't know if this is gonna work, if it does, need to update this regularly
+        current_robot_state_->setToDefaultValues();
+        joint_group_model_ = kinematic_model_->getJointModelGroup(planning_group_);
+        const std::vector<std::string>& joint_names = joint_group_model_->getVariableNames();
+        std::vector<double> joint_values;
+        current_robot_state_->copyJointGroupPositions(joint_group_model_,joint_values);
+        for(std::size_t i=0; i<joint_names.size();i++){
+            RCLCPP_INFO(node_->get_logger(),"Joint %s : %f",joint_names[i].c_str(),joint_values[i]);
+        }
+
         // servers
         callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
         print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",std::bind(&TSCubicPolynomialTraj::print_state, this,std::placeholders::_1, std::placeholders::_2),rmw_qos_profile_services_default,callback_group_);
@@ -135,7 +154,7 @@ public:
                 return;
             }
         );
-        
+
         executor_->spin();
     }
 
@@ -628,7 +647,17 @@ public:
 
         std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>> trajectory = waypointPlanning(std::vector<geometry_msgs::msg::Pose>{wp1,wp2,wp3,wp4},std::vector<double>{0.0,0.1,0.2,0.0});
         latest_trajectory_ = trajectory;
-        std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>> js_traj = generate_js_traj(trajectory);
+        // std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>> js_traj = generate_js_traj(trajectory);
+
+
+        do_ik([](){
+            geometry_msgs::msg::Pose pose;
+            pose.position.x=0.1;
+            pose.position.y=0.4;
+            pose.position.z=0.1;
+            pose.orientation.w=1.0;
+            return pose;
+        }());
 
         return true;
     }
@@ -701,6 +730,35 @@ public:
         return true;
     }
 
+    // given a pose, does ik
+    void do_ik(const geometry_msgs::msg::Pose& eepose){
+        Eigen::Isometry3d ee_state;
+        ee_state.translation().x() = eepose.position.x;
+        ee_state.translation().y() = eepose.position.y;
+        ee_state.translation().z() = eepose.position.z;
+        ee_state.rotate(Eigen::Quaterniond(eepose.orientation.w,eepose.orientation.x,eepose.orientation.y,eepose.orientation.z));
+        bool found_ik = current_robot_state_->setFromIK(joint_group_model_,ee_state,0.1);
+        std::vector<double> joint_values;
+        std::vector<std::string> joint_names = joint_group_model_->getVariableNames();
+        if(found_ik){
+            current_robot_state_->copyJointGroupPositions(joint_group_model_, joint_values);
+            for (std::size_t i = 0; i < joint_names.size(); ++i)
+            {
+              RCLCPP_INFO(node_->get_logger(), "Joint %s: %f", joint_names[i].c_str(), joint_values[i]);
+            }
+        }
+        else
+            RCLCPP_INFO(node_->get_logger(), "Did not find IK solution");
+
+        // We can also get the Jacobian from the :moveit_codedir:`RobotState<moveit_core/robot_state/include/moveit/robot_state/robot_state.h>`.
+        Eigen::Vector3d reference_point_position(0.0, 0.0, 0.0);
+        Eigen::MatrixXd jacobian;
+        current_robot_state_->getJacobian(joint_group_model_,
+                                     current_robot_state_->getLinkModel(joint_group_model_->getLinkModelNames().back()),
+                                     reference_point_position, jacobian);
+        RCLCPP_INFO_STREAM(node_->get_logger(), "Jacobian: \n" << jacobian << "\n");
+    }
+    
     void print_state(const std_srvs::srv::Trigger::Request::SharedPtr request,std_srvs::srv::Trigger::Response::SharedPtr response){
         auto current_state = move_group_interface_->getCurrentState();
         (void)current_state;
@@ -748,6 +806,11 @@ private:
     rclcpp::CallbackGroup::SharedPtr callback_group_;
     
     rclcpp::Clock system_clock_;
+
+    // moveit stuff
+    moveit::core::RobotModelPtr kinematic_model_;
+    moveit::core::RobotStatePtr current_robot_state_;
+    const moveit::core::JointModelGroup* joint_group_model_;
 
     // servers
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_state_server_;
