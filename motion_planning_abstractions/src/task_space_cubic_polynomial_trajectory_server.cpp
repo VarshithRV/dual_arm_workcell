@@ -636,28 +636,54 @@ public:
         // *latest_trajectory_ = trajectory;
 
         geometry_msgs::msg::Pose wp1,wp2,wp3,wp4;
-        wp1.position.x=0.1;
-        wp2.position.y=1.2;
-        wp3.position.z=0.3;
-        wp4.position.x=0.5;
-        wp1.orientation.w=1;
-        wp1.orientation.w=1;
-        wp1.orientation.w=1;
-        wp1.orientation.w=1;
+        // Waypoint 1
+        wp1.position.x = 0.289;
+        wp1.position.y = 0.766;
+        wp1.position.z = 0.697;
+        wp1.orientation.x = -0.500;
+        wp1.orientation.y = -0.500;
+        wp1.orientation.z =  0.500;
+        wp1.orientation.w =  0.500;
+            
+        // Waypoint 2
+        wp2.position.x = 0.558;
+        wp2.position.y = 0.830;
+        wp2.position.z = 0.823;
+        wp2.orientation.x = -0.630;
+        wp2.orientation.y = -0.321;
+        wp2.orientation.z =  0.322;
+        wp2.orientation.w =  0.629;
+            
+        // Waypoint 3
+        wp3.position.x = 0.494;
+        wp3.position.y = 1.155;
+        wp3.position.z = 0.735;
+        wp3.orientation.x = -0.627;
+        wp3.orientation.y = -0.327;
+        wp3.orientation.z =  0.328;
+        wp3.orientation.w =  0.626;
+            
+        // Waypoint 4
+        wp4.position.x = 0.316;
+        wp4.position.y = 0.899;
+        wp4.position.z = 0.862;
+        wp4.orientation.x = -0.627;
+        wp4.orientation.y = -0.327;
+        wp4.orientation.z =  0.328;
+        wp4.orientation.w =  0.626;
 
         std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>> trajectory = waypointPlanning(std::vector<geometry_msgs::msg::Pose>{wp1,wp2,wp3,wp4},std::vector<double>{0.0,0.1,0.2,0.0});
         latest_trajectory_ = trajectory;
-        // std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>> js_traj = generate_js_traj(trajectory);
+        std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>> js_traj = generate_js_traj(trajectory);
 
-
-        do_ik([](){
-            geometry_msgs::msg::Pose pose;
-            pose.position.x=0.1;
-            pose.position.y=0.4;
-            pose.position.z=0.1;
-            pose.orientation.w=1.0;
-            return pose;
-        }());
+        // do_ik([](){
+        //     geometry_msgs::msg::Pose pose;
+        //     pose.position.x=0.1;
+        //     pose.position.y=0.4;
+        //     pose.position.z=0.1;
+        //     pose.orientation.w=1.0;
+        //     return pose;
+        // }());
 
         return true;
     }
