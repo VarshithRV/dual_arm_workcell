@@ -8,14 +8,20 @@
 #include <thread>
 #include <vector>
 #include <cmath>
+#include <future>
+#include <sstream>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/executors/multi_threaded_executor.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
+#include "rclcpp_components/register_node_macro.hpp"
 
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/point.hpp"
 #include "geometry_msgs/msg/wrench.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+
+#include "control_msgs/action/follow_joint_trajectory.hpp"
 
 #include "moveit/move_group_interface/move_group_interface.h"
 #include "moveit_msgs/msg/robot_trajectory.hpp"
@@ -145,14 +151,47 @@ public:
         );
         generate_trajectory_server_ = node_->create_service<motion_planning_abstractions_msgs::srv::GenerateTrajectory>("~/generate_trajectory", 
             [this](motion_planning_abstractions_msgs::srv::GenerateTrajectory::Request::SharedPtr req, motion_planning_abstractions_msgs::srv::GenerateTrajectory::Response::SharedPtr res){
-                generate_trajectory_server_callback_(req,res); // change this
+                generate_trajectory_server_callback_(req,res);
                 return;
             }
         );
-        execute_trajectory_server_ = node_->create_service<motion_planning_abstractions_msgs::srv::ExecuteTrajectory>("~/execute_trajectory", 
-            [this](motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Request::SharedPtr req, motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Response::SharedPtr res){
-                execute_trajectory_server_callback_(req,res); // change this
+
+        //////// REPLACING THE SERVER WITH A TRIGGER BECAUSE ITS HARD TO TEST WITH JUST COMMAND LINE, need to change this before using it properly
+        // execute_trajectory_server_ = node_->create_service<motion_planning_abstractions_msgs::srv::ExecuteTrajectory>("~/execute_trajectory", 
+        //     [this](motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Request::SharedPtr req, motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Response::SharedPtr res){
+        //         execute_trajectory_server_callback_(req,res);
+        //         return;
+        //     }
+        // );
+        execute_trajectory_server_ = node_->create_service<std_srvs::srv::Trigger>("~/execute_trajectory", 
+            [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
+                execute_trajectory_server_callback_();
                 return;
+            }
+        );
+
+        // publisher
+        jt_publisher_ = node_->create_publisher<trajectory_msgs::msg::JointTrajectory>("~/latest_trajectory",10);
+
+        // action clients
+        sjtc_client_ptr_ = rclcpp_action::create_client<control_msgs::action::FollowJointTrajectory>(
+            node_,
+            arm_side + "_scaled_joint_trajectory_controller/follow_joint_trajectory"            
+        );
+        // wait for the action
+        if(!this->sjtc_client_ptr_->wait_for_action_server()){
+            RCLCPP_ERROR(node_->get_logger(),"SJTC action server is not available");
+            rclcpp::shutdown();
+        }
+
+        // timers
+        // timers
+        latest_jt_publisher_timer_ = node_->create_wall_timer(1500ms,
+            [this](){
+                if(latest_joint_trajectory_ !=nullptr){
+                    auto msg = trajectory_msgs::msg::JointTrajectory(*latest_joint_trajectory_); 
+                    jt_publisher_->publish(msg);
+                }
             }
         );
 
@@ -472,7 +511,6 @@ public:
         return trajectory;
     }
 
-    // generate joint space trajectory on a task space trajectory
     std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>> generate_js_traj(
     std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>>& task_space_trajectory)
     {
@@ -483,8 +521,10 @@ public:
             return nullptr;
         }
 
-        auto js_trajectory = std::make_shared<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>>();
+        auto js_trajectory =
+            std::make_shared<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>>();
 
+        // 1) Initial joint state = current robot state
         moveit::core::RobotStatePtr robot_state = move_group_interface_->getCurrentState(1.0);
         if (!robot_state) {
             RCLCPP_ERROR(node_->get_logger(), "Failed to get current robot state");
@@ -498,44 +538,51 @@ public:
             return nullptr;
         }
 
-        const moveit::core::LinkModel* ee_link_model = robot_state->getLinkModel(endeffector_link_);
-        if (!ee_link_model) {
-            RCLCPP_ERROR(node_->get_logger(), "Failed to get end-effector link model: %s", endeffector_link_.c_str());
-            return nullptr;
-        }
+        std::vector<double> current_joint_values;
+        robot_state->copyJointGroupPositions(joint_model_group, current_joint_values);
 
-        std::vector<double> seed_joint_values;
-        robot_state->copyJointGroupPositions(joint_model_group, seed_joint_values);
-
-        if (seed_joint_values.size() != 6) {
+        if (current_joint_values.size() != 6) {
             RCLCPP_ERROR(
                 node_->get_logger(),
                 "Expected 6 joints in planning group %s, but got %zu",
                 planning_group_.c_str(),
-                seed_joint_values.size());
+                current_joint_values.size());
             return nullptr;
         }
 
-        const double lambda = 1e-3;
-        const double ik_timeout = 0.02;
+        // Hard limit requested by you
+        constexpr double joint_velocity_limit = 3.0;   // rad/s
+        constexpr double ik_timeout = 0.02;
+        constexpr double min_dt = 1e-4;
 
         auto wrap_to_pi = [](double angle) -> double {
             return std::atan2(std::sin(angle), std::cos(angle));
         };
 
-        auto unwrap_to_nearest = [&](const std::vector<double>& reference, std::vector<double>& candidate) {
+        auto unwrap_to_nearest = [&](const std::vector<double>& reference,
+                                     std::vector<double>& candidate) {
             for (std::size_t j = 0; j < candidate.size(); ++j) {
                 candidate[j] = reference[j] + wrap_to_pi(candidate[j] - reference[j]);
             }
         };
 
+        // Previous accepted joint solution and time
+        std::vector<double> prev_joint_values = current_joint_values;
+        double accumulated_time = 0.0;
+
         for (std::size_t i = 0; i < task_space_trajectory->size(); ++i) {
             const auto& ts_point = task_space_trajectory->at(i);
 
-            robot_state->setJointGroupPositions(joint_model_group, seed_joint_values);
+            // Seed IK with previous joint solution for continuity
+            robot_state->setJointGroupPositions(joint_model_group, prev_joint_values);
             robot_state->update();
 
-            bool found_ik = robot_state->setFromIK(joint_model_group, ts_point.waypoint, ik_timeout);
+            bool found_ik = robot_state->setFromIK(
+                joint_model_group,
+                ts_point.waypoint,
+                endeffector_link_,
+                ik_timeout);
+
             if (!found_ik) {
                 RCLCPP_ERROR(
                     node_->get_logger(),
@@ -559,77 +606,80 @@ public:
                 return nullptr;
             }
 
-            unwrap_to_nearest(seed_joint_values, joint_positions);
-            robot_state->setJointGroupPositions(joint_model_group, joint_positions);
-            robot_state->update();
+            // 2) Make joint positions continuous by unwrapping w.r.t. previous point
+            unwrap_to_nearest(prev_joint_values, joint_positions);
 
-            Eigen::MatrixXd J;
-            bool jacobian_ok = robot_state->getJacobian(
-                joint_model_group,
-                ee_link_model,
-                Eigen::Vector3d::Zero(),
-                J);
+            TSCubicPolynomialTraj::jointSpaceTrajPoint js_point;
 
-            if (!jacobian_ok) {
-                RCLCPP_ERROR(node_->get_logger(), "Failed to compute Jacobian at point %zu", i);
-                return nullptr;
+            if (i == 0) {
+                // First point: zero velocity, time = 0
+                js_point.basejoint.position = joint_positions[0];
+                js_point.basejoint.velocity = 0.0;
+
+                js_point.shoulderjoint.position = joint_positions[1];
+                js_point.shoulderjoint.velocity = 0.0;
+
+                js_point.elbowjoint.position = joint_positions[2];
+                js_point.elbowjoint.velocity = 0.0;
+
+                js_point.wrist1.position = joint_positions[3];
+                js_point.wrist1.velocity = 0.0;
+
+                js_point.wrist2.position = joint_positions[4];
+                js_point.wrist2.velocity = 0.0;
+
+                js_point.wrist3.position = joint_positions[5];
+                js_point.wrist3.velocity = 0.0;
+
+                js_point.duration_from_start = 0.0;
+                js_trajectory->push_back(js_point);
+
+                prev_joint_values = joint_positions;
+                continue;
             }
 
-            if (J.rows() != 6 || J.cols() != 6) {
-                RCLCPP_ERROR(
-                    node_->get_logger(),
-                    "Jacobian size mismatch at point %zu: got %ld x %ld",
-                    i,
-                    J.rows(),
-                    J.cols());
-                return nullptr;
+            // Nominal dt from task-space trajectory
+            double nominal_dt =
+                task_space_trajectory->at(i).duration_from_start -
+                task_space_trajectory->at(i - 1).duration_from_start;
+
+            if (nominal_dt < min_dt) {
+                nominal_dt = min_dt;
             }
 
-            Eigen::Matrix<double, 6, 1> twist;
-            twist << ts_point.velocity.linear.x,
-                     ts_point.velocity.linear.y,
-                     ts_point.velocity.linear.z,
-                     ts_point.velocity.angular.x,
-                     ts_point.velocity.angular.y,
-                     ts_point.velocity.angular.z;
+            // 3) Preserve path, reduce task-space speed if any joint exceeds 3 rad/s
+            //    We do this by stretching the local time interval.
+            std::vector<double> dq(6, 0.0);
+            double max_required_velocity = 0.0;
 
-            if (!J.allFinite() || !twist.allFinite()) {
-                RCLCPP_ERROR(node_->get_logger(), "Non-finite Jacobian or twist at point %zu", i);
-                return nullptr;
-            }
-
-            Eigen::Matrix<double, 6, 6> I = Eigen::Matrix<double, 6, 6>::Identity();
-            Eigen::Matrix<double, 6, 6> A = J * J.transpose() + (lambda * lambda) * I;
-
-            Eigen::LDLT<Eigen::Matrix<double, 6, 6>> ldlt(A);
-            if (ldlt.info() != Eigen::Success) {
-                RCLCPP_ERROR(node_->get_logger(), "LDLT decomposition failed at point %zu", i);
-                return nullptr;
-            }
-
-            Eigen::Matrix<double, 6, 1> joint_velocities = J.transpose() * ldlt.solve(twist);
-
-            if (!joint_velocities.allFinite()) {
-                RCLCPP_ERROR(node_->get_logger(), "Non-finite joint velocities at point %zu", i);
-                return nullptr;
-            }
-
-            for (int j = 0; j < 6; ++j) {
-                double unclipped = joint_velocities[j];
-                if (joint_velocities[j] > maximum_joint_space_velocity_) {
-                    joint_velocities[j] = maximum_joint_space_velocity_;
-                    RCLCPP_WARN(node_->get_logger(),
-                                "Joint %d velocity clipped at point %zu: %.4f -> %.4f",
-                                j + 1, i, unclipped, joint_velocities[j]);
-                } else if (joint_velocities[j] < -maximum_joint_space_velocity_) {
-                    joint_velocities[j] = -maximum_joint_space_velocity_;
-                    RCLCPP_WARN(node_->get_logger(),
-                                "Joint %d velocity clipped at point %zu: %.4f -> %.4f",
-                                j + 1, i, unclipped, joint_velocities[j]);
+            for (std::size_t j = 0; j < 6; ++j) {
+                dq[j] = joint_positions[j] - prev_joint_values[j];
+                double required_velocity = std::abs(dq[j]) / nominal_dt;
+                if (required_velocity > max_required_velocity) {
+                    max_required_velocity = required_velocity;
                 }
             }
 
-            TSCubicPolynomialTraj::jointSpaceTrajPoint js_point;
+            double scale = 1.0;
+            if (max_required_velocity > joint_velocity_limit) {
+                scale = max_required_velocity / joint_velocity_limit;
+                RCLCPP_WARN(
+                    node_->get_logger(),
+                    "Point %zu exceeds joint velocity limit: max required %.4f rad/s. "
+                    "Stretching local dt by %.4f to preserve path.",
+                    i,
+                    max_required_velocity,
+                    scale);
+            }
+
+            double actual_dt = nominal_dt * scale;
+            accumulated_time += actual_dt;
+
+            std::vector<double> joint_velocities(6, 0.0);
+            for (std::size_t j = 0; j < 6; ++j) {
+                joint_velocities[j] = dq[j] / actual_dt;
+            }
+
             js_point.basejoint.position = joint_positions[0];
             js_point.basejoint.velocity = joint_velocities[0];
 
@@ -648,16 +698,22 @@ public:
             js_point.wrist3.position = joint_positions[5];
             js_point.wrist3.velocity = joint_velocities[5];
 
-            js_point.duration_from_start = ts_point.duration_from_start;
+            js_point.duration_from_start = accumulated_time;
             js_trajectory->push_back(js_point);
 
-            seed_joint_values = joint_positions;
+            prev_joint_values = joint_positions;
         }
 
         latest_joint_space_trajectory_ = js_trajectory;
+        RCLCPP_INFO(
+            node_->get_logger(),
+            "generate_js_traj: generated %zu joint-space points successfully",
+            js_trajectory->size());
+
         return js_trajectory;
     }
     
+    // user interface to generate the full joint space trajectory
     void generate_trajectory_server_callback_(
         motion_planning_abstractions_msgs::srv::GenerateTrajectory::Request::SharedPtr req, 
         motion_planning_abstractions_msgs::srv::GenerateTrajectory::Response::SharedPtr res
@@ -720,6 +776,8 @@ public:
         // create a js trajectory
         std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>>
         js_traj = generate_js_traj(ts_traj);
+        res->trajectory.points.resize(js_traj->size());
+
         if(js_traj==nullptr){
             res->fraction = 0;
             res->message = "joint space trajectory generation failed";
@@ -758,20 +816,89 @@ public:
                 (*js_traj)[i].wrist2.velocity,
                 (*js_traj)[i].wrist3.velocity,
             };
+            
+            auto t = (*js_traj)[i].duration_from_start;
+            rclcpp::Duration d = rclcpp::Duration::from_seconds(t);
+            builtin_interfaces::msg::Duration msg;
+            msg.sec = d.seconds();
+            msg.nanosec = (d.nanoseconds() % 1000000000);
+            
+            res->trajectory.points[i].time_from_start=msg;
         }
+
+        latest_joint_trajectory_ = std::make_shared<trajectory_msgs::msg::JointTrajectory>(res->trajectory);
 
         res->fraction = 100;
         res->message = "joint space trajectory generation succeeded";
     }
 
+    
+    //////// REPLACING THE SERVER WITH A TRIGGER BECAUSE ITS HARD TO TEST WITH JUST COMMAND LINE, need to change this before using it properly
+    // user interface to execute trajectory
     void execute_trajectory_server_callback_(
-        motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Request::SharedPtr req, 
-        motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Response::SharedPtr res
-    ){
-        req->trajectory; // trajectory_msgs/JointTrajectory message
-        // execute the scaled_jtc action
-        res->success = true;
-        res->message = "all good bro";
+    // motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Request::SharedPtr req,
+    // motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Response::SharedPtr res)
+    )
+    {
+        using FollowJointTrajectory = control_msgs::action::FollowJointTrajectory;
+        using GoalHandleFollowJointTrajectory = rclcpp_action::ClientGoalHandle<FollowJointTrajectory>;
+
+        if (!sjtc_client_ptr_->wait_for_action_server(std::chrono::seconds(2))) {
+            RCLCPP_ERROR(node_->get_logger(), "SJTC action server not available");
+            //////// REPLACING THE SERVER WITH A TRIGGER BECAUSE ITS HARD TO TEST WITH JUST COMMAND LINE, need to change this before using it properly
+            // res->success = false;
+            // res->message = "SJTC action server not available";
+            return;
+        }
+
+        FollowJointTrajectory::Goal sjtc_goal;
+
+        if(latest_joint_trajectory_ ==nullptr){
+            RCLCPP_ERROR(node_->get_logger(),"No trajectory generated yet");
+        }
+        //////// REPLACING THE SERVER WITH A TRIGGER BECAUSE ITS HARD TO TEST WITH JUST COMMAND LINE, need to change this before using it properly
+        sjtc_goal.trajectory = *latest_joint_trajectory_;
+        // sjtc_goal.trajectory = req->trajectory;
+
+        RCLCPP_INFO(node_->get_logger(), "Sending trajectory to SJTC action");
+
+        auto send_goal_options =
+            rclcpp_action::Client<FollowJointTrajectory>::SendGoalOptions();
+
+        send_goal_options.goal_response_callback =
+            [this](const GoalHandleFollowJointTrajectory::SharedPtr & goal_handle)
+            {
+                if (!goal_handle) {
+                    RCLCPP_ERROR(node_->get_logger(), "Goal was rejected by the server");
+                } else {
+                    RCLCPP_INFO(node_->get_logger(), "Goal was accepted by the server");
+                }
+            };
+
+        send_goal_options.result_callback =
+            [this](const GoalHandleFollowJointTrajectory::WrappedResult & result)
+            {
+                switch (result.code) {
+                    case rclcpp_action::ResultCode::SUCCEEDED:
+                        RCLCPP_INFO(node_->get_logger(), "Trajectory execution succeeded");
+                        break;
+                    case rclcpp_action::ResultCode::ABORTED:
+                        RCLCPP_ERROR(node_->get_logger(), "Trajectory execution aborted");
+                        break;
+                    case rclcpp_action::ResultCode::CANCELED:
+                        RCLCPP_WARN(node_->get_logger(), "Trajectory execution canceled");
+                        break;
+                    default:
+                        RCLCPP_ERROR(node_->get_logger(), "Unknown trajectory execution result");
+                        break;
+                }
+            };
+
+        sjtc_client_ptr_->async_send_goal(sjtc_goal, send_goal_options);
+
+        //////// REPLACING THE SERVER WITH A TRIGGER BECAUSE ITS HARD TO TEST WITH JUST COMMAND LINE, need to change this before using it properly
+        // res->success = true;
+        // res->message = "Trajectory goal sent to SJTC action server";
     }
 
     // TEST SERVER CALLBACK HERE
@@ -1015,14 +1142,24 @@ private:
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_latest_trajectory_server_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_latest_joint_space_trajectory_server_;
     rclcpp::Service<motion_planning_abstractions_msgs::srv::GenerateTrajectory>::SharedPtr generate_trajectory_server_;
-    rclcpp::Service<motion_planning_abstractions_msgs::srv::ExecuteTrajectory>::SharedPtr execute_trajectory_server_;
+    
+    //////// REPLACING THE SERVER WITH A TRIGGER BECAUSE ITS HARD TO TEST WITH JUST COMMAND LINE, need to change this before using it properly
+    // rclcpp::Service<motion_planning_abstractions_msgs::srv::ExecuteTrajectory>::SharedPtr execute_trajectory_server_;
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr execute_trajectory_server_;
 
     // clients
 
     // publishers
+    rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr jt_publisher_;
 
     // subscribers
     
+    // action_clients
+    rclcpp_action::Client<control_msgs::action::FollowJointTrajectory>::SharedPtr sjtc_client_ptr_;
+
+    // timers
+    rclcpp::TimerBase::SharedPtr latest_jt_publisher_timer_;
+
     // parameters and data
     std::string arm_side;
     std::string joint_trajectory_controller_;
@@ -1034,9 +1171,11 @@ private:
     double maximum_joint_space_acceleration_; // not in use right now
     std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>> latest_trajectory_;
     std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>> latest_joint_space_trajectory_;
+    std::shared_ptr<trajectory_msgs::msg::JointTrajectory> latest_joint_trajectory_;
     double average_velocity_=0.3; // change this to make pt to pt traj faster or slower by making this bigger or smaller
     double waypoint_velocity_ = 0.05; // change this to make the robot slower or faster at waypoints
     double dt_=0.05; //trajectory interval
+    
 };
 
 int main(int argc, char *argv[])

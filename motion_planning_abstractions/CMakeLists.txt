@@ -19,6 +19,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   open_set_object_detection_msgs
   pluginlib
   rclcpp
+  rclcpp_action
   rclcpp_components
   sensor_msgs
   std_msgs
@@ -48,6 +49,7 @@ find_package(open_set_object_detection_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
+find_package(rclcpp_action REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
@@ -93,8 +95,7 @@ DESTINATION lib/${PROJECT_NAME}
 )
 
 add_executable(task_space_cubic_polynomial_trajectory_server src/task_space_cubic_polynomial_trajectory_server.cpp)
-ament_target_dependencies(task_space_cubic_polynomial_trajectory_server rclcpp geometry_msgs moveit_ros_planning_interface 
-moveit_core motion_planning_abstractions_msgs ur_msgs controller_manager_msgs std_srvs open_set_object_detection_msgs tf2 tf2_geometry_msgs rosidl_runtime_cpp)
+ament_target_dependencies(task_space_cubic_polynomial_trajectory_server ${THIS_PACKAGE_INCLUDE_DEPENDS})
 install(TARGETS
 task_space_cubic_polynomial_trajectory_server
 DESTINATION lib/${PROJECT_NAME}

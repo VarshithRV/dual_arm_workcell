@@ -16,6 +16,8 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
 
+  <depend>rclcpp_action</depend>
+  <depend>rclcpp_components</depend>
   <depend>dual_arm_workcell_bringup</depend>
   <depend>motion_planning_abstractions_msgs</depend>
   <depend>moveit_ros_planning_interface</depend>
@@ -31,6 +33,7 @@
   <depend>moveit_servo</depend>
   <depend>rosidl_runtime_cpp</depend>
   <depend>trajectory_msgs</depend>
+  <depend>control_msgs</depend>
 
   <export>
     <build_type>ament_cmake</build_type>
