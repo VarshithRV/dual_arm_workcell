@@ -1,0 +1,6 @@
+geometry_msgs/Pose[] waypoints
+---
+trajectory_msgs/JointTrajectory trajectory
+bool success
+int32 fraction 0# percentage
+string message

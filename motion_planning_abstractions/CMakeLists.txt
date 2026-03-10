@@ -29,6 +29,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   trajectory_msgs
   ur_msgs
   rosidl_runtime_cpp
+  trajectory_msgs
 )
 
 # find dependencies
@@ -56,6 +57,7 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(ur_msgs REQUIRED)
 find_package(rosidl_runtime_cpp REQUIRED)
+find_package(trajectory_msgs REQUIRED)
 
 # uncomment the following section in order to fill in
 # further dependencies manually.

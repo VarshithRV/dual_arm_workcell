@@ -24,6 +24,9 @@
 #include "rosidl_runtime_cpp/traits.hpp"
 #include "Eigen/Dense"
 #include "Eigen/Geometry"
+#include "motion_planning_abstractions_msgs/srv/generate_trajectory.hpp"
+#include "motion_planning_abstractions_msgs/srv/execute_trajectory.hpp"
+#include "trajectory_msgs/msg/joint_trajectory.hpp"
 
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_model/robot_model.h>
@@ -37,8 +40,7 @@ using namespace std::chrono_literals;
 using moveit::planning_interface::MoveGroupInterface;
 
 
-class TSCubicPolynomialTraj
-{
+class TSCubicPolynomialTraj{
 public:
     struct trajPoint{
         geometry_msgs::msg::Pose waypoint;
@@ -106,32 +108,19 @@ public:
         executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
         executor_->add_node(node_);
 
-        rclcpp::sleep_for(3s);
-
-        // print shit
-        auto planning_frame = this->move_group_interface_->getPlanningFrame();
-        RCLCPP_INFO(node_->get_logger(), "Planning frame : %s", planning_frame.c_str());
-
-        auto endeffector = this->move_group_interface_->getEndEffectorLink();
-        RCLCPP_INFO(node_->get_logger(), "End Effector Link : %s", endeffector.c_str());
-
-        auto current_pose = this->move_group_interface_->getCurrentPose(endeffector);
-        RCLCPP_INFO(node_->get_logger(),"x : %f, y : %f, z : %f",current_pose.pose.position.x,current_pose.pose.position.y,current_pose.pose.position.z);
+        rclcpp::sleep_for(1s);
 
         // robot model stuff for fk,ik and jacobian
         robot_model_loader::RobotModelLoader robot_model_loader(node_);
         kinematic_model_ = robot_model_loader.getModel();
         RCLCPP_INFO(node_->get_logger(),"Kinematic model loaded,model frame : %s",kinematic_model_->getModelFrame().c_str());
         
-        current_robot_state_=std::make_shared<moveit::core::RobotState>(kinematic_model_); // ? don't know if this is gonna work, if it does, need to update this regularly
+        current_robot_state_=std::make_shared<moveit::core::RobotState>(kinematic_model_);
         current_robot_state_->setToDefaultValues();
         joint_group_model_ = kinematic_model_->getJointModelGroup(planning_group_);
         const std::vector<std::string>& joint_names = joint_group_model_->getVariableNames();
         std::vector<double> joint_values;
         current_robot_state_->copyJointGroupPositions(joint_group_model_,joint_values);
-        for(std::size_t i=0; i<joint_names.size();i++){
-            RCLCPP_INFO(node_->get_logger(),"Joint %s : %f",joint_names[i].c_str(),joint_values[i]);
-        }
 
         // servers
         callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
@@ -151,6 +140,18 @@ public:
         print_latest_joint_space_trajectory_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_latest_joint_space_trajectory",
             [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
                 res->success = print_latest_joint_space_trajectory_server_callback_();
+                return;
+            }
+        );
+        generate_trajectory_server_ = node_->create_service<motion_planning_abstractions_msgs::srv::GenerateTrajectory>("~/generate_trajectory", 
+            [this](motion_planning_abstractions_msgs::srv::GenerateTrajectory::Request::SharedPtr req, motion_planning_abstractions_msgs::srv::GenerateTrajectory::Response::SharedPtr res){
+                generate_trajectory_server_callback_(req,res); // change this
+                return;
+            }
+        );
+        execute_trajectory_server_ = node_->create_service<motion_planning_abstractions_msgs::srv::ExecuteTrajectory>("~/execute_trajectory", 
+            [this](motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Request::SharedPtr req, motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Response::SharedPtr res){
+                execute_trajectory_server_callback_(req,res); // change this
                 return;
             }
         );
@@ -226,6 +227,7 @@ public:
         geometry_msgs::msg::Pose w_in, geometry_msgs::msg::Twist v_in, 
         geometry_msgs::msg::Pose w_f, geometry_msgs::msg::Twist v_f, double duration, double dt
     ){
+        
         std::vector<TSCubicPolynomialTraj::trajPoint> trajectory_msg; // initialize a trajectory message
         
         int size;
@@ -354,7 +356,123 @@ public:
         return trajectory_msg;
     }
 
+    // provide a vector of poses are waypoints and a vector of doubles that give the velocity magnitudes at the corresponding waypoints in ms-1
+    // provide the starting and ending velocity as 0.0, if not given, will be enforced anyways
+    // if the lengths of the two vectors are different, then it will fail
+    std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>>
+    waypointPlanning(std::vector<geometry_msgs::msg::Pose> waypoints,std::vector<double> waypoint_velocities){
+        if (waypoints.size() != waypoint_velocities.size() || waypoints.empty()) {
+            return nullptr;
+        }
+    
+        std::vector<Eigen::Vector3d> waypoints_positions;
+        std::vector<Eigen::Quaterniond> waypoints_orientations;
+    
+        for (const geometry_msgs::msg::Pose& waypoint : waypoints) {
+            waypoints_positions.push_back(
+                Eigen::Vector3d(waypoint.position.x, waypoint.position.y, waypoint.position.z));
+            waypoints_orientations.push_back(
+                Eigen::Quaterniond(waypoint.orientation.w, waypoint.orientation.x,
+                                   waypoint.orientation.y, waypoint.orientation.z));
+        }
+    
+        auto trajectory = std::make_shared<std::vector<TSCubicPolynomialTraj::trajPoint>>();
+        std::vector<Eigen::Vector3d> waypoint_velocity_vectors;
+        std::vector<double> durations;
+    
+        waypoint_velocities.front() = 0.0;
+        waypoint_velocities.back() = 0.0;
+    
+        for (int i = 0; i < static_cast<int>(waypoints.size()); ++i) {
+            if (i == 0 || i == static_cast<int>(waypoints.size()) - 1) {
+                waypoint_velocity_vectors.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+            } else {
+                Eigen::Vector3d velocity_direction = waypoints_positions[i + 1] - waypoints_positions[i - 1];
+                if (velocity_direction.norm() > 1e-9) {
+                    waypoint_velocity_vectors.push_back(
+                        (velocity_direction / velocity_direction.norm()) * waypoint_velocities[i]);
+                } else {
+                    waypoint_velocity_vectors.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+                }
+            }
+        }
+    
+        for (int i = 0; i < static_cast<int>(waypoints.size()) - 1; ++i) {
+            Eigen::Vector3d displacement = waypoints_positions[i + 1] - waypoints_positions[i];
+            durations.push_back(displacement.norm() / average_velocity_);
+        }
+        durations.push_back(0.0);
 
+        // generate trajectories for the segments and return
+        double cumulative_time = 0.0;
+
+        for (int i = 0; i < static_cast<int>(waypoints_positions.size()) - 1; ++i) {
+            geometry_msgs::msg::Pose w_in;
+            w_in.position.x = waypoints_positions[i][0];
+            w_in.position.y = waypoints_positions[i][1];
+            w_in.position.z = waypoints_positions[i][2];
+            w_in.orientation.x = waypoints_orientations[i].x();
+            w_in.orientation.y = waypoints_orientations[i].y();
+            w_in.orientation.z = waypoints_orientations[i].z();
+            w_in.orientation.w = waypoints_orientations[i].w();
+        
+            geometry_msgs::msg::Pose w_f;
+            w_f.position.x = waypoints_positions[i + 1][0];
+            w_f.position.y = waypoints_positions[i + 1][1];
+            w_f.position.z = waypoints_positions[i + 1][2];
+            w_f.orientation.x = waypoints_orientations[i + 1].x();
+            w_f.orientation.y = waypoints_orientations[i + 1].y();
+            w_f.orientation.z = waypoints_orientations[i + 1].z();
+            w_f.orientation.w = waypoints_orientations[i + 1].w();
+        
+            geometry_msgs::msg::Twist v_in;
+            v_in.linear.x = waypoint_velocity_vectors[i][0];
+            v_in.linear.y = waypoint_velocity_vectors[i][1];
+            v_in.linear.z = waypoint_velocity_vectors[i][2];
+            v_in.angular.x = 0.0;
+            v_in.angular.y = 0.0;
+            v_in.angular.z = 0.0;
+        
+            geometry_msgs::msg::Twist v_f;
+            v_f.linear.x = waypoint_velocity_vectors[i + 1][0];
+            v_f.linear.y = waypoint_velocity_vectors[i + 1][1];
+            v_f.linear.z = waypoint_velocity_vectors[i + 1][2];
+            v_f.angular.x = 0.0;
+            v_f.angular.y = 0.0;
+            v_f.angular.z = 0.0;
+        
+            double duration = durations[i];
+        
+            if (duration <= 1e-9) {
+                continue;
+            }
+        
+            auto dtrajectory = generate_trajectory_(w_in, v_in, w_f, v_f, duration, dt_);
+        
+            if (dtrajectory.empty()) {
+                RCLCPP_WARN(node_->get_logger(),
+                            "Segment %d trajectory generation failed or returned empty trajectory",
+                            i);
+                return nullptr;
+            }
+        
+            const std::size_t start_idx = (i == 0) ? 0 : 1;
+        
+            for (std::size_t j = start_idx; j < dtrajectory.size(); ++j) {
+                TSCubicPolynomialTraj::trajPoint point = (dtrajectory)[j];
+            
+                point.duration_from_start += cumulative_time;
+                trajectory->push_back(point);
+            }
+        
+            cumulative_time += duration;
+        }
+
+        latest_trajectory_ = trajectory;
+        return trajectory;
+    }
+
+    // generate joint space trajectory on a task space trajectory
     std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>> generate_js_traj(
     std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>>& task_space_trajectory)
     {
@@ -540,123 +658,122 @@ public:
         return js_trajectory;
     }
     
-    
-    // provide a vector of poses are waypoints and a vector of doubles that give the velocity magnitudes at the corresponding waypoints in ms-1
-    // provide the starting and ending velocity as 0.0, if not given, will be enforced anyways
-    // if the lengths of the two vectors are different, then it will fail
-    std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>>
-    waypointPlanning(std::vector<geometry_msgs::msg::Pose> waypoints,std::vector<double> waypoint_velocities){
-        if (waypoints.size() != waypoint_velocities.size() || waypoints.empty()) {
-            return nullptr;
-        }
-    
-        std::vector<Eigen::Vector3d> waypoints_positions;
-        std::vector<Eigen::Quaterniond> waypoints_orientations;
-    
-        for (const geometry_msgs::msg::Pose& waypoint : waypoints) {
-            waypoints_positions.push_back(
-                Eigen::Vector3d(waypoint.position.x, waypoint.position.y, waypoint.position.z));
-            waypoints_orientations.push_back(
-                Eigen::Quaterniond(waypoint.orientation.w, waypoint.orientation.x,
-                                   waypoint.orientation.y, waypoint.orientation.z));
-        }
-    
-        auto trajectory = std::make_shared<std::vector<TSCubicPolynomialTraj::trajPoint>>();
-        std::vector<Eigen::Vector3d> waypoint_velocity_vectors;
-        std::vector<double> durations;
-    
-        waypoint_velocities.front() = 0.0;
-        waypoint_velocities.back() = 0.0;
-    
-        for (int i = 0; i < static_cast<int>(waypoints.size()); ++i) {
-            if (i == 0 || i == static_cast<int>(waypoints.size()) - 1) {
-                waypoint_velocity_vectors.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
-            } else {
-                Eigen::Vector3d velocity_direction = waypoints_positions[i + 1] - waypoints_positions[i - 1];
-                if (velocity_direction.norm() > 1e-9) {
-                    waypoint_velocity_vectors.push_back(
-                        (velocity_direction / velocity_direction.norm()) * waypoint_velocities[i]);
-                } else {
-                    waypoint_velocity_vectors.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
-                }
-            }
-        }
-    
-        for (int i = 0; i < static_cast<int>(waypoints.size()) - 1; ++i) {
-            Eigen::Vector3d displacement = waypoints_positions[i + 1] - waypoints_positions[i];
-            durations.push_back(displacement.norm() / average_velocity_);
-        }
-        durations.push_back(0.0);
+    void generate_trajectory_server_callback_(
+        motion_planning_abstractions_msgs::srv::GenerateTrajectory::Request::SharedPtr req, 
+        motion_planning_abstractions_msgs::srv::GenerateTrajectory::Response::SharedPtr res
+    ){
+        std::vector<geometry_msgs::msg::Pose> waypoints(req->waypoints);
+        
+        RCLCPP_INFO(node_->get_logger(),"Started generating trajectory");
+        
+        // get current pose
+        move_group_interface_->setStartStateToCurrentState();
+        auto current_pose = move_group_interface_->getCurrentPose().pose;
+        Eigen::Vector3d current_position(current_pose.position.x,current_pose.position.y,current_pose.position.z);
+        Eigen::Quaterniond current_orientation(current_pose.orientation.w,current_pose.orientation.x,current_pose.orientation.y,current_pose.orientation.z);
+        
+        auto first_waypoint=req->waypoints[0];
+        Eigen::Vector3d first_waypoint_position(first_waypoint.position.x,first_waypoint.position.y,first_waypoint.position.z);
+        Eigen::Quaterniond first_waypoint_orientation(first_waypoint.orientation.w,first_waypoint.orientation.x,first_waypoint.orientation.y,first_waypoint.orientation.z);
+        
+        // RCLCPP_INFO(node_->get_logger(),"Current robot position : %.2f, %.2f, %.2f",current_position[0],current_position[1],current_position[2]);
+        // RCLCPP_INFO(node_->get_logger(),"First robot position : %.2f, %.2f, %.2f",first_waypoint_position[0],first_waypoint_position[1],first_waypoint_position[2]);
+        // RCLCPP_INFO(node_->get_logger(),"Current robot orientation : %.2f, %.2f, %.2f, %.2f",current_orientation.w(),current_orientation.x(),current_orientation.y(),current_orientation.z());
+        // RCLCPP_INFO(node_->get_logger(),"First robot orientation : %.2f, %.2f, %.2f, %.2f",first_waypoint_orientation.w(),first_waypoint_orientation.x(),first_waypoint_orientation.y(),first_waypoint_orientation.z());
 
-        // generate trajectories for the segments and return
-        double cumulative_time = 0.0;
+        double linear_deviation=(first_waypoint_position-current_position).norm();
+        double angular_deviation = (Eigen::AngleAxisd(first_waypoint_orientation*current_orientation.inverse())).angle();
 
-        for (int i = 0; i < static_cast<int>(waypoints_positions.size()) - 1; ++i) {
-            geometry_msgs::msg::Pose w_in;
-            w_in.position.x = waypoints_positions[i][0];
-            w_in.position.y = waypoints_positions[i][1];
-            w_in.position.z = waypoints_positions[i][2];
-            w_in.orientation.x = waypoints_orientations[i].x();
-            w_in.orientation.y = waypoints_orientations[i].y();
-            w_in.orientation.z = waypoints_orientations[i].z();
-            w_in.orientation.w = waypoints_orientations[i].w();
-        
-            geometry_msgs::msg::Pose w_f;
-            w_f.position.x = waypoints_positions[i + 1][0];
-            w_f.position.y = waypoints_positions[i + 1][1];
-            w_f.position.z = waypoints_positions[i + 1][2];
-            w_f.orientation.x = waypoints_orientations[i + 1].x();
-            w_f.orientation.y = waypoints_orientations[i + 1].y();
-            w_f.orientation.z = waypoints_orientations[i + 1].z();
-            w_f.orientation.w = waypoints_orientations[i + 1].w();
-        
-            geometry_msgs::msg::Twist v_in;
-            v_in.linear.x = waypoint_velocity_vectors[i][0];
-            v_in.linear.y = waypoint_velocity_vectors[i][1];
-            v_in.linear.z = waypoint_velocity_vectors[i][2];
-            v_in.angular.x = 0.0;
-            v_in.angular.y = 0.0;
-            v_in.angular.z = 0.0;
-        
-            geometry_msgs::msg::Twist v_f;
-            v_f.linear.x = waypoint_velocity_vectors[i + 1][0];
-            v_f.linear.y = waypoint_velocity_vectors[i + 1][1];
-            v_f.linear.z = waypoint_velocity_vectors[i + 1][2];
-            v_f.angular.x = 0.0;
-            v_f.angular.y = 0.0;
-            v_f.angular.z = 0.0;
-        
-            double duration = durations[i];
-        
-            if (duration <= 1e-9) {
-                continue;
-            }
-        
-            auto dtrajectory = generate_trajectory_(w_in, v_in, w_f, v_f, duration, dt_);
-        
-            if (dtrajectory.empty()) {
-                RCLCPP_WARN(node_->get_logger(),
-                            "Segment %d trajectory generation failed or returned empty trajectory",
-                            i);
-                return nullptr;
-            }
-        
-            const std::size_t start_idx = (i == 0) ? 0 : 1;
-        
-            for (std::size_t j = start_idx; j < dtrajectory.size(); ++j) {
-                TSCubicPolynomialTraj::trajPoint point = (dtrajectory)[j];
-            
-                point.duration_from_start += cumulative_time;
-                trajectory->push_back(point);
-            }
-        
-            cumulative_time += duration;
+        if(std::abs(linear_deviation)>1e-3 && std::abs(angular_deviation)>1e-2){
+            waypoints.insert(waypoints.begin(),current_pose);
         }
 
-        latest_trajectory_ = trajectory;
-        return trajectory;
+        std::vector<double> waypoint_velocities;
+        for(int i=0;i<waypoints.size();i++){
+            if(i==0 || i==waypoints.size()-1)
+                waypoint_velocities.push_back(0.0);
+            else
+                waypoint_velocities.push_back(waypoint_velocity_);
+        }
+
+        RCLCPP_INFO(node_->get_logger(),"Wayopints and corresponding velocities");
+        
+        // for(int i=0; i < waypoint_velocities.size();i++){
+        //     RCLCPP_INFO(node_->get_logger(),"Waypoint position: %.2f, %.2f, %.2f",waypoints[i].position.x,waypoints[i].position.y,waypoints[i].position.z);
+        //     RCLCPP_INFO(node_->get_logger(),"Waypoint orientation: %.2f, %.2f, %.2f, %.2f",waypoints[i].orientation.w,waypoints[i].orientation.x,waypoints[i].orientation.y,waypoints[i].orientation.z);
+        //     RCLCPP_INFO(node_->get_logger(),"Waypoint velocity: %.2f",waypoint_velocities[i]);
+        // }
+
+        // plan a task space path
+        auto ts_traj = waypointPlanning(waypoints,waypoint_velocities);
+        if(ts_traj==nullptr){
+            res->fraction = 0;
+            res->message = "task space trajectory generation failed";
+            return;
+        }
+        else{
+            RCLCPP_INFO(node_->get_logger(),"Generated task space trajectory successfully");
+        }
+
+        latest_trajectory_ = ts_traj;
+
+        // create a js trajectory
+        std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>>
+        js_traj = generate_js_traj(ts_traj);
+        if(js_traj==nullptr){
+            res->fraction = 0;
+            res->message = "joint space trajectory generation failed";
+            return;
+        }
+
+        latest_joint_space_trajectory_ = js_traj;
+
+        res->trajectory.header.frame_id = "world";
+        res->trajectory.header.stamp = node_->get_clock()->now();
+        res->trajectory.joint_names = {
+            arm_side + "_shoulder_pan_joint",
+            arm_side + "_shoulder_lift_joint",
+            arm_side + "_elbow_joint",
+            arm_side + "_wrist_1_joint",
+            arm_side + "_wrist_2_joint",
+            arm_side + "_wrist_3_joint"
+        };
+
+        // populate the res->trajectory message here
+        for(int i=0;i<js_traj->size();i++){
+            res->trajectory.points[i].positions = {
+                (*js_traj)[i].basejoint.position,
+                (*js_traj)[i].shoulderjoint.position,
+                (*js_traj)[i].elbowjoint.position,
+                (*js_traj)[i].wrist1.position,
+                (*js_traj)[i].wrist2.position,
+                (*js_traj)[i].wrist3.position,
+            };
+
+            res->trajectory.points[i].velocities = {
+                (*js_traj)[i].basejoint.velocity,
+                (*js_traj)[i].shoulderjoint.velocity,
+                (*js_traj)[i].elbowjoint.velocity,
+                (*js_traj)[i].wrist1.velocity,
+                (*js_traj)[i].wrist2.velocity,
+                (*js_traj)[i].wrist3.velocity,
+            };
+        }
+
+        res->fraction = 100;
+        res->message = "joint space trajectory generation succeeded";
     }
-    
+
+    void execute_trajectory_server_callback_(
+        motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Request::SharedPtr req, 
+        motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Response::SharedPtr res
+    ){
+        req->trajectory; // trajectory_msgs/JointTrajectory message
+        // execute the scaled_jtc action
+        res->success = true;
+        res->message = "all good bro";
+    }
+
     // TEST SERVER CALLBACK HERE
     bool test_server_callback_(){
         RCLCPP_INFO(node_->get_logger(),"Entered test service");
@@ -737,6 +854,9 @@ public:
     }
 
     bool print_latest_trajectory_server_callback_(){
+        if (latest_trajectory_==nullptr)
+            return false;
+
         for(TSCubicPolynomialTraj::trajPoint point :*latest_trajectory_){
             RCLCPP_INFO(
                 node_->get_logger(),
@@ -781,6 +901,9 @@ public:
     }
 
     bool print_latest_joint_space_trajectory_server_callback_(){
+        if(latest_joint_space_trajectory_ ==nullptr)
+            return false;
+
         for(TSCubicPolynomialTraj::jointSpaceTrajPoint point :*latest_joint_space_trajectory_){
             RCLCPP_INFO(
                 node_->get_logger(),
@@ -891,6 +1014,8 @@ private:
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr test_server_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_latest_trajectory_server_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_latest_joint_space_trajectory_server_;
+    rclcpp::Service<motion_planning_abstractions_msgs::srv::GenerateTrajectory>::SharedPtr generate_trajectory_server_;
+    rclcpp::Service<motion_planning_abstractions_msgs::srv::ExecuteTrajectory>::SharedPtr execute_trajectory_server_;
 
     // clients
 
@@ -910,6 +1035,7 @@ private:
     std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>> latest_trajectory_;
     std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>> latest_joint_space_trajectory_;
     double average_velocity_=0.3; // change this to make pt to pt traj faster or slower by making this bigger or smaller
+    double waypoint_velocity_ = 0.05; // change this to make the robot slower or faster at waypoints
     double dt_=0.05; //trajectory interval
 };
 
