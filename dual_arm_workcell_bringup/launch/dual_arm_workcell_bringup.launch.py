@@ -55,6 +55,18 @@ def launch_setup():
         ),
         launch_arguments={
             'use_sim_time': use_sim_time,
+            'left_translation_x': str(left_translation[0]),
+            'left_translation_y': str(left_translation[1]),
+            'left_translation_z': str(left_translation[2]),
+            'left_rotation_r': str(left_rotation[0]),
+            'left_rotation_p': str(left_rotation[1]),
+            'left_rotation_y': str(left_rotation[2]),
+            'right_translation_x': str(right_translation[0]),
+            'right_translation_y': str(right_translation[1]),
+            'right_translation_z': str(right_translation[2]),
+            'right_rotation_r': str(right_rotation[0]),
+            'right_rotation_p': str(right_rotation[1]),
+            'right_rotation_y': str(right_rotation[2]),
         }.items()
     )
 
