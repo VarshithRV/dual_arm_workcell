@@ -888,8 +888,9 @@ public:
 
         RCLCPP_INFO(node_->get_logger(), "Sending trajectory to SJTC action");
 
+        // INTERFACE WITH THE SJTC controller
         auto send_goal_options =
-            rclcpp_action::Client<FollowJointTrajectory>::SendGoalOptions();
+        rclcpp_action::Client<FollowJointTrajectory>::SendGoalOptions();
 
         send_goal_options.goal_response_callback =
         [this](const GoalHandleFollowJointTrajectory::SharedPtr & goal_handle)
@@ -901,30 +902,8 @@ public:
             }
         };
 
-        send_goal_options.result_callback =
-        [this](const GoalHandleFollowJointTrajectory::WrappedResult & result)
-        {
-
-            switch (result.code) {
-                case rclcpp_action::ResultCode::SUCCEEDED:
-                    RCLCPP_INFO(node_->get_logger(), "Trajectory execution succeeded");
-                    return true;
-                    break;
-                case rclcpp_action::ResultCode::ABORTED:
-                    RCLCPP_ERROR(node_->get_logger(), "Trajectory execution aborted");
-                    return false;
-                    break;
-                case rclcpp_action::ResultCode::CANCELED:
-                    RCLCPP_WARN(node_->get_logger(), "Trajectory execution canceled");
-                    return false;
-                    break;
-                default:
-                    RCLCPP_ERROR(node_->get_logger(), "Unknown trajectory execution result");
-                    return false;
-                    break;
-            }
-        };
         sjtc_client_ptr_->async_send_goal(sjtc_goal, send_goal_options);
+
     }
 
     // TEST SERVER CALLBACK HERE
