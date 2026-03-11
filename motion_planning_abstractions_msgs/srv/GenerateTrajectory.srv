@@ -1,4 +1,6 @@
 geometry_msgs/Pose[] waypoints
+float32 average_speed 0.3 # speed between waypoints
+float32 waypoint_speed 0.05 # speed at the waypoints
 ---
 trajectory_msgs/JointTrajectory trajectory
 bool success

@@ -549,7 +549,6 @@ public:
         auto js_trajectory =
             std::make_shared<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>>();
 
-        // 1) Initial joint state = current robot state
         moveit::core::RobotStatePtr robot_state = move_group_interface_->getCurrentState(1.0);
         if (!robot_state) {
             RCLCPP_ERROR(node_->get_logger(), "Failed to get current robot state");
@@ -575,8 +574,7 @@ public:
             return nullptr;
         }
 
-        // Hard limit requested by you
-        constexpr double joint_velocity_limit = 3.0;   // rad/s
+        constexpr double joint_velocity_limit = 3.0;  
         constexpr double ik_timeout = 0.02;
         constexpr double min_dt = 1e-4;
 
@@ -591,14 +589,12 @@ public:
             }
         };
 
-        // Previous accepted joint solution and time
         std::vector<double> prev_joint_values = current_joint_values;
         double accumulated_time = 0.0;
 
         for (std::size_t i = 0; i < task_space_trajectory->size(); ++i) {
             const auto& ts_point = task_space_trajectory->at(i);
 
-            // Seed IK with previous joint solution for continuity
             robot_state->setJointGroupPositions(joint_model_group, prev_joint_values);
             robot_state->update();
 
@@ -631,13 +627,11 @@ public:
                 return nullptr;
             }
 
-            // 2) Make joint positions continuous by unwrapping w.r.t. previous point
             unwrap_to_nearest(prev_joint_values, joint_positions);
 
             TSCubicPolynomialTraj::jointSpaceTrajPoint js_point;
 
             if (i == 0) {
-                // First point: zero velocity, time = 0
                 js_point.basejoint.position = joint_positions[0];
                 js_point.basejoint.velocity = 0.0;
 
@@ -663,7 +657,6 @@ public:
                 continue;
             }
 
-            // Nominal dt from task-space trajectory
             double nominal_dt =
                 task_space_trajectory->at(i).duration_from_start -
                 task_space_trajectory->at(i - 1).duration_from_start;
@@ -672,8 +665,6 @@ public:
                 nominal_dt = min_dt;
             }
 
-            // 3) Preserve path, reduce task-space speed if any joint exceeds 3 rad/s
-            //    We do this by stretching the local time interval.
             std::vector<double> dq(6, 0.0);
             double max_required_velocity = 0.0;
 
@@ -738,13 +729,15 @@ public:
         return js_trajectory;
     }
     
-    // user interface to generate the full joint space trajectory
+    // external interface to generate the full joint space trajectory
     void generate_trajectory_server_callback_(
         motion_planning_abstractions_msgs::srv::GenerateTrajectory::Request::SharedPtr req, 
         motion_planning_abstractions_msgs::srv::GenerateTrajectory::Response::SharedPtr res
     ){
         std::vector<geometry_msgs::msg::Pose> waypoints(req->waypoints);
-        
+        waypoint_velocity_ = req->waypoint_speed;
+        average_velocity_ = req->average_speed;
+
         RCLCPP_INFO(node_->get_logger(),"Started generating trajectory");
         
         // get current pose
