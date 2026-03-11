@@ -54,6 +54,9 @@
    <xacro:arg name="left_rotation_r" default="0.0" />
    <xacro:arg name="left_rotation_p" default="0.0" />
    <xacro:arg name="left_rotation_y" default="1.570796" />
+   <xacro:arg name="left_tool0_x" default="0.0"/>
+   <xacro:arg name="left_tool0_y" default="0.0"/>
+   <xacro:arg name="left_tool0_z" default="0.189"/>
 
    <!-- RIGHT ROBOT parameters -->
    <xacro:arg name="right_ur_type" default="ur16e"/>
@@ -94,6 +97,9 @@
    <xacro:arg name="right_rotation_r" default="0.00" />
    <xacro:arg name="right_rotation_p" default="0.00" />
    <xacro:arg name="right_rotation_y" default="1.570796" />
+   <xacro:arg name="right_tool0_x" default="0.0"/>
+   <xacro:arg name="right_tool0_y" default="0.0"/>
+   <xacro:arg name="right_tool0_z" default="0.125"/>
 
    <!-- initial position for simulations (Fake Hardware, Gazebo, Ignition) -->
    <!-- optional properties, if you prefer the same pattern as the UR driver -->
@@ -161,9 +167,9 @@
      tool_tx_idle_chars="$(arg left_tool_tx_idle_chars)"
      tool_device_name="$(arg left_tool_device_name)"
      tool_tcp_port="$(arg left_tool_tcp_port)"
-     tool0_x="0.0"
-     tool0_y="0.0"
-     tool0_z="0.189"
+     tool0_x="$(arg left_tool0_x)"
+     tool0_y="$(arg left_tool0_y)"
+     tool0_z="$(arg left_tool0_z)"
      robot_ip="$(arg left_robot_ip)"
      script_filename="$(arg left_script_filename)"
      output_recipe_filename="$(arg left_output_recipe_filename)"
@@ -205,9 +211,9 @@
      tool_tx_idle_chars="$(arg right_tool_tx_idle_chars)"
      tool_device_name="$(arg right_tool_device_name)"
      tool_tcp_port="$(arg right_tool_tcp_port)"
-     tool0_x="0.0"
-     tool0_y="0.0"
-     tool0_z="0.125"
+     tool0_x="$(arg right_tool0_x)"
+     tool0_y="$(arg right_tool0_y)"
+     tool0_z="$(arg right_tool0_z)"
      robot_ip="$(arg right_robot_ip)"
      script_filename="$(arg right_script_filename)"
      output_recipe_filename="$(arg right_output_recipe_filename)"

@@ -84,6 +84,9 @@ def launch_setup(context, *args, **kwargs):
     left_rotation_r = LaunchConfiguration("left_rotation_r")
     left_rotation_p = LaunchConfiguration("left_rotation_p")
     left_rotation_y = LaunchConfiguration("left_rotation_y")
+    left_tool0_x = LaunchConfiguration("left_tool0_x")
+    left_tool0_y = LaunchConfiguration("left_tool0_y")
+    left_tool0_z = LaunchConfiguration("left_tool0_z")
     left_joint_limit_params = PathJoinSubstitution([FindPackageShare(description_package), "config", left_ur_type, "joint_limits.yaml"])
     left_physical_params = PathJoinSubstitution([FindPackageShare(description_package), "config", left_ur_type, "physical_parameters.yaml"])
     left_visual_params = PathJoinSubstitution([FindPackageShare(description_package), "config", left_ur_type, "visual_parameters.yaml"])
@@ -118,6 +121,9 @@ def launch_setup(context, *args, **kwargs):
     right_rotation_r = LaunchConfiguration("right_rotation_r")
     right_rotation_p = LaunchConfiguration("right_rotation_p")
     right_rotation_y = LaunchConfiguration("right_rotation_y")
+    right_tool0_x = LaunchConfiguration("right_tool0_x")
+    right_tool0_y = LaunchConfiguration("right_tool0_y")
+    right_tool0_z = LaunchConfiguration("right_tool0_z")
     right_joint_limit_params = PathJoinSubstitution([FindPackageShare(description_package), "config", right_ur_type, "joint_limits.yaml"])
     right_physical_params = PathJoinSubstitution([FindPackageShare(description_package), "config", right_ur_type, "physical_parameters.yaml"])
     right_visual_params = PathJoinSubstitution([FindPackageShare(description_package), "config", right_ur_type, "visual_parameters.yaml"])
@@ -241,6 +247,15 @@ def launch_setup(context, *args, **kwargs):
             "left_rotation_y:=",
             left_rotation_y,
             " ",
+            "left_tool0_x:=",
+            left_tool0_x,
+            " ",
+            "left_tool0_y:=",
+            left_tool0_y,
+            " ",
+            "left_tool0_z:=",
+            left_tool0_z,
+            " ",
             "right_robot_ip:=",
             right_robot_ip,
             " ",
@@ -342,6 +357,15 @@ def launch_setup(context, *args, **kwargs):
             " ",
             "right_rotation_y:=",
             right_rotation_y,
+            " ",
+            "right_tool0_x:=",
+            right_tool0_x,
+            " ",
+            "right_tool0_y:=",
+            right_tool0_y,
+            " ",
+            "right_tool0_z:=",
+            right_tool0_z,
             " ",
         ]
     )
@@ -784,6 +808,27 @@ def generate_launch_description():
             description="Roll of the left robot in the world",
         )
     )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "left_tool0_x",
+            default_value="0.0",
+            description="tool x of left robot",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "left_tool0_y",
+            default_value="0.0",
+            description="tool y of left robot",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "left_tool0_z",
+            default_value="0.189",
+            description="tool z of left robot",
+        )
+    )
 
     # right robot arguments
     declared_arguments.append(
@@ -1005,6 +1050,27 @@ def generate_launch_description():
             "right_rotation_y",
             default_value="1.570796",
             description="Yaw of the right robot in the world",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "right_tool0_x",
+            default_value="0.0",
+            description="tool x of right robot",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "right_tool0_y",
+            default_value="0.0",
+            description="tool y of right robot",
+        )
+    )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "right_tool0_z",
+            default_value="0.125",
+            description="tool z of right robot",
         )
     )
     
