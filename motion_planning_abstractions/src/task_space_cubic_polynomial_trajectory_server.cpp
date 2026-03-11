@@ -72,10 +72,6 @@ public:
 
     TSCubicPolynomialTraj()
     {
-        // rclcpp::NodeOptions node_options;
-        // node_options.automatically_declare_parameters_from_overrides(true);
-        // node_options.use_global_arguments(false);
-
         node_ = std::make_shared<rclcpp::Node>("ts_cubic_polnomial_traj_server");
 
         // parameter declaration
@@ -165,8 +161,7 @@ public:
         // );
         execute_trajectory_server_ = node_->create_service<std_srvs::srv::Trigger>("~/execute_trajectory", 
             [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
-                execute_trajectory_server_callback_();
-                return;
+                res->success = execute_trajectory_server_callback_();
             }
         );
 
@@ -185,8 +180,7 @@ public:
         }
 
         // timers
-        // timers
-        latest_jt_publisher_timer_ = node_->create_wall_timer(1500ms,
+        latest_jt_publisher_timer_ = node_->create_wall_timer(200ms,
             [this](){
                 if(latest_joint_trajectory_ !=nullptr){
                     auto msg = trajectory_msgs::msg::JointTrajectory(*latest_joint_trajectory_); 
@@ -438,9 +432,40 @@ public:
     
         for (int i = 0; i < static_cast<int>(waypoints.size()) - 1; ++i) {
             Eigen::Vector3d displacement = waypoints_positions[i + 1] - waypoints_positions[i];
-            durations.push_back(displacement.norm() / average_velocity_);
+            Eigen::AngleAxisd angular_displacement(waypoints_orientations[i+1]*waypoints_orientations[i].inverse());
+            durations.push_back(std::max(displacement.norm() / average_velocity_, angular_displacement.angle()/average_angular_velocity_ ));
         }
         durations.push_back(0.0);
+
+        // adding this print for debugging
+        for (size_t i = 0; i < waypoints_positions.size(); ++i)
+        {
+            const auto &p = waypoints_positions[i];
+            const auto &q = waypoints_orientations[i];
+            const auto &v = waypoint_velocity_vectors[i];
+        
+            double duration = (i < durations.size()) ? durations[i] : 0.0;
+        
+            RCLCPP_INFO(
+                node_->get_logger(),
+                "Waypoint %zu | "
+                "pos [%.6f %.6f %.6f] | "
+                "quat [%.6f %.6f %.6f %.6f] | "
+                "vel [%.6f %.6f %.6f] | "
+                "duration %.6f",
+                i,
+                p.x(), p.y(), p.z(),
+                q.w(), q.x(), q.y(), q.z(),
+                v.x(), v.y(), v.z(),
+                duration
+            );
+
+            if(i<waypoints_positions.size()-1){
+                Eigen::Vector3d displacement = waypoints_positions[i + 1] - waypoints_positions[i];
+                Eigen::AngleAxisd angular_displacement(waypoints_orientations[i+1]*waypoints_orientations[i].inverse());
+                RCLCPP_INFO(node_->get_logger(),"Linear displacement : %.2f, Angular displacement : %.2f",displacement.norm(),angular_displacement.angle());
+            }
+        }
 
         // generate trajectories for the segments and return
         double cumulative_time = 0.0;
@@ -481,7 +506,7 @@ public:
             v_f.angular.z = 0.0;
         
             double duration = durations[i];
-        
+            RCLCPP_INFO(node_->get_logger(),"Duration : %.2f",duration);
             if (duration <= 1e-9) {
                 continue;
             }
@@ -732,15 +757,15 @@ public:
         Eigen::Vector3d first_waypoint_position(first_waypoint.position.x,first_waypoint.position.y,first_waypoint.position.z);
         Eigen::Quaterniond first_waypoint_orientation(first_waypoint.orientation.w,first_waypoint.orientation.x,first_waypoint.orientation.y,first_waypoint.orientation.z);
         
-        // RCLCPP_INFO(node_->get_logger(),"Current robot position : %.2f, %.2f, %.2f",current_position[0],current_position[1],current_position[2]);
-        // RCLCPP_INFO(node_->get_logger(),"First robot position : %.2f, %.2f, %.2f",first_waypoint_position[0],first_waypoint_position[1],first_waypoint_position[2]);
-        // RCLCPP_INFO(node_->get_logger(),"Current robot orientation : %.2f, %.2f, %.2f, %.2f",current_orientation.w(),current_orientation.x(),current_orientation.y(),current_orientation.z());
-        // RCLCPP_INFO(node_->get_logger(),"First robot orientation : %.2f, %.2f, %.2f, %.2f",first_waypoint_orientation.w(),first_waypoint_orientation.x(),first_waypoint_orientation.y(),first_waypoint_orientation.z());
+        RCLCPP_INFO(node_->get_logger(),"Current robot position : %.2f, %.2f, %.2f",current_position[0],current_position[1],current_position[2]);
+        RCLCPP_INFO(node_->get_logger(),"First robot position : %.2f, %.2f, %.2f",first_waypoint_position[0],first_waypoint_position[1],first_waypoint_position[2]);
+        RCLCPP_INFO(node_->get_logger(),"Current robot orientation : %.2f, %.2f, %.2f, %.2f",current_orientation.w(),current_orientation.x(),current_orientation.y(),current_orientation.z());
+        RCLCPP_INFO(node_->get_logger(),"First robot orientation : %.2f, %.2f, %.2f, %.2f",first_waypoint_orientation.w(),first_waypoint_orientation.x(),first_waypoint_orientation.y(),first_waypoint_orientation.z());
 
         double linear_deviation=(first_waypoint_position-current_position).norm();
         double angular_deviation = (Eigen::AngleAxisd(first_waypoint_orientation*current_orientation.inverse())).angle();
 
-        if(std::abs(linear_deviation)>1e-3 && std::abs(angular_deviation)>1e-2){
+        if(std::abs(linear_deviation)>1e-3 || std::abs(angular_deviation)>1e-2){
             waypoints.insert(waypoints.begin(),current_pose);
         }
 
@@ -776,6 +801,12 @@ public:
         // create a js trajectory
         std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>>
         js_traj = generate_js_traj(ts_traj);
+        if(js_traj == nullptr){
+            res->fraction = 0;
+            res->success = false;
+            res->message = "No trajectory generated";
+            return;
+        }
         res->trajectory.points.resize(js_traj->size());
 
         if(js_traj==nullptr){
@@ -829,13 +860,14 @@ public:
         latest_joint_trajectory_ = std::make_shared<trajectory_msgs::msg::JointTrajectory>(res->trajectory);
 
         res->fraction = 100;
+        res->success = true;
         res->message = "joint space trajectory generation succeeded";
     }
 
     
     //////// REPLACING THE SERVER WITH A TRIGGER BECAUSE ITS HARD TO TEST WITH JUST COMMAND LINE, need to change this before using it properly
     // user interface to execute trajectory
-    void execute_trajectory_server_callback_(
+    bool execute_trajectory_server_callback_(
     // motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Request::SharedPtr req,
     // motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Response::SharedPtr res)
     )
@@ -848,13 +880,14 @@ public:
             //////// REPLACING THE SERVER WITH A TRIGGER BECAUSE ITS HARD TO TEST WITH JUST COMMAND LINE, need to change this before using it properly
             // res->success = false;
             // res->message = "SJTC action server not available";
-            return;
+            return false;
         }
 
         FollowJointTrajectory::Goal sjtc_goal;
 
         if(latest_joint_trajectory_ ==nullptr){
             RCLCPP_ERROR(node_->get_logger(),"No trajectory generated yet");
+            return false;
         }
         //////// REPLACING THE SERVER WITH A TRIGGER BECAUSE ITS HARD TO TEST WITH JUST COMMAND LINE, need to change this before using it properly
         sjtc_goal.trajectory = *latest_joint_trajectory_;
@@ -866,39 +899,39 @@ public:
             rclcpp_action::Client<FollowJointTrajectory>::SendGoalOptions();
 
         send_goal_options.goal_response_callback =
-            [this](const GoalHandleFollowJointTrajectory::SharedPtr & goal_handle)
-            {
-                if (!goal_handle) {
-                    RCLCPP_ERROR(node_->get_logger(), "Goal was rejected by the server");
-                } else {
-                    RCLCPP_INFO(node_->get_logger(), "Goal was accepted by the server");
-                }
-            };
+        [this](const GoalHandleFollowJointTrajectory::SharedPtr & goal_handle)
+        {
+            if (!goal_handle) {
+                RCLCPP_ERROR(node_->get_logger(), "Goal was rejected by the server");
+            } else {
+                RCLCPP_INFO(node_->get_logger(), "Goal was accepted by the server");
+            }
+        };
 
         send_goal_options.result_callback =
-            [this](const GoalHandleFollowJointTrajectory::WrappedResult & result)
-            {
-                switch (result.code) {
-                    case rclcpp_action::ResultCode::SUCCEEDED:
-                        RCLCPP_INFO(node_->get_logger(), "Trajectory execution succeeded");
-                        break;
-                    case rclcpp_action::ResultCode::ABORTED:
-                        RCLCPP_ERROR(node_->get_logger(), "Trajectory execution aborted");
-                        break;
-                    case rclcpp_action::ResultCode::CANCELED:
-                        RCLCPP_WARN(node_->get_logger(), "Trajectory execution canceled");
-                        break;
-                    default:
-                        RCLCPP_ERROR(node_->get_logger(), "Unknown trajectory execution result");
-                        break;
-                }
-            };
+        [this](const GoalHandleFollowJointTrajectory::WrappedResult & result)
+        {
 
+            switch (result.code) {
+                case rclcpp_action::ResultCode::SUCCEEDED:
+                    RCLCPP_INFO(node_->get_logger(), "Trajectory execution succeeded");
+                    return true;
+                    break;
+                case rclcpp_action::ResultCode::ABORTED:
+                    RCLCPP_ERROR(node_->get_logger(), "Trajectory execution aborted");
+                    return false;
+                    break;
+                case rclcpp_action::ResultCode::CANCELED:
+                    RCLCPP_WARN(node_->get_logger(), "Trajectory execution canceled");
+                    return false;
+                    break;
+                default:
+                    RCLCPP_ERROR(node_->get_logger(), "Unknown trajectory execution result");
+                    return false;
+                    break;
+            }
+        };
         sjtc_client_ptr_->async_send_goal(sjtc_goal, send_goal_options);
-
-        //////// REPLACING THE SERVER WITH A TRIGGER BECAUSE ITS HARD TO TEST WITH JUST COMMAND LINE, need to change this before using it properly
-        // res->success = true;
-        // res->message = "Trajectory goal sent to SJTC action server";
     }
 
     // TEST SERVER CALLBACK HERE
@@ -1173,6 +1206,7 @@ private:
     std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>> latest_joint_space_trajectory_;
     std::shared_ptr<trajectory_msgs::msg::JointTrajectory> latest_joint_trajectory_;
     double average_velocity_=0.3; // change this to make pt to pt traj faster or slower by making this bigger or smaller
+    double average_angular_velocity_=M_PI/6; // change this to make pt to pt traj faster or slower by making this bigger or smaller
     double waypoint_velocity_ = 0.05; // change this to make the robot slower or faster at waypoints
     double dt_=0.05; //trajectory interval
     
