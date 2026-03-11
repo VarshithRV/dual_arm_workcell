@@ -171,7 +171,7 @@ public:
         // action clients
         sjtc_client_ptr_ = rclcpp_action::create_client<control_msgs::action::FollowJointTrajectory>(
             node_,
-            arm_side + "_scaled_joint_trajectory_controller/follow_joint_trajectory"            
+            joint_trajectory_controller_ +"/follow_joint_trajectory"            
         );
         // wait for the action
         if(!this->sjtc_client_ptr_->wait_for_action_server()){
