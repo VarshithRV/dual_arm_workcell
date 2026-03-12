@@ -6,20 +6,15 @@
 #include <vector>
 #include <cmath>
 #include <sstream>
-
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/executors/multi_threaded_executor.hpp"
-
 #include "geometry_msgs/msg/pose.hpp"
-
 #include "std_srvs/srv/trigger.hpp"
-
 #include "moveit/move_group_interface/move_group_interface.h"
 #include "moveit_msgs/msg/robot_trajectory.hpp"
-
+#include "motion_planning_abstractions_msgs/srv/generate_trajectory.hpp"
 #include "Eigen/Dense"
 #include "Eigen/Geometry"
-
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_state/robot_state.h>
@@ -75,28 +70,31 @@ public:
         std::vector<double> joint_values;
         current_robot_state_->copyJointGroupPositions(joint_group_model_,joint_values);
 
-        // servers
         callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
+        // servers
         print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",std::bind(&BareBonesMoveit::print_state, this,std::placeholders::_1, std::placeholders::_2),rmw_qos_profile_services_default,callback_group_);
         test_server_ = node_->create_service<std_srvs::srv::Trigger>("~/test_server",
             [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
                 res->success = test_server_callback_();
                 return;
-            }
+            },
+            rmw_qos_profile_services_default,
+            callback_group_
         );
 
         // publisher
         sample_publisher_ = node_->create_publisher<geometry_msgs::msg::Pose>("~/sample_topic",10);
 
         // service clients
-        sample_client_ = node_->create_client<std_srvs::srv::Trigger>("/sample_service");
+        execute_trajectory_client_ = node_->create_client<std_srvs::srv::Trigger>("/right_task_space_cubic_polynomial_trajectory_server/execute_trajectory");
+        generate_trajectory_client_ = node_->create_client<motion_planning_abstractions_msgs::srv::GenerateTrajectory>("/right_task_space_cubic_polynomial_trajectory_server/generate_trajectory");
 
         // timers
         sample_timer_ = node_->create_wall_timer(200ms,
             [this](){
                 rclcpp::sleep_for(std::chrono::milliseconds(50));
-            }
+            },callback_group_
         );
 
         executor_->spin();
@@ -107,14 +105,130 @@ public:
         auto eepose = move_group_interface_->getCurrentPose();
         do_ik(eepose.pose);
         do_fk(std::vector<double>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+        
+        auto LOGGER = node_->get_logger();
+        
+        auto current_pose = move_group_interface_->getCurrentPose().pose;
+        RCLCPP_INFO(LOGGER,"Current x:%.2f, y:%.2f, z:%.2f, qw:%.2f,qx:%.2f,qy:%.2f,qz:%.2f",
+            current_pose.position.x,
+            current_pose.position.y,
+            current_pose.position.z,
+            current_pose.orientation.w,
+            current_pose.orientation.x,
+            current_pose.orientation.y,
+            current_pose.orientation.z
+        );
+
         move_to_joint_positions(std::vector<double>{
-            0.7448494020060257,
-            -1.6898253014238567,
-            -2.456773372167499,
-            -0.6417658203742237,
-            -1.5154170572868646,
-            2.4306718044994686
+            -1.3648873614431747,
+            -1.7595786208070698,
+            2.0876774906060356,
+            -1.7340977760567944,
+            -5.633357407467017,
+            1.3341727624436612
         });
+        
+        rclcpp::sleep_for(std::chrono::milliseconds(3000));
+        RCLCPP_INFO(LOGGER,"Finished the boring stuff, starting cubic traj now");
+
+        // cubic trajectory client
+        current_pose = move_group_interface_->getCurrentPose().pose;
+        RCLCPP_INFO(LOGGER,"Current x:%.2f, y:%.2f, z:%.2f, qw:%.2f,qx:%.2f,qy:%.2f,qz:%.2f",
+            current_pose.position.x,
+            current_pose.position.y,
+            current_pose.position.z,
+            current_pose.orientation.w,
+            current_pose.orientation.x,
+            current_pose.orientation.y,
+            current_pose.orientation.z
+        );
+
+        auto wp1(current_pose),wp2(current_pose),wp3(current_pose);
+        wp1.position.x += 0.3;
+        wp2.position.y -= 0.1;
+        wp3.position.z += 0.05;
+
+        auto req = std::make_shared<motion_planning_abstractions_msgs::srv::GenerateTrajectory::Request>();
+        req->durations = std::vector<double>{0.0,1,0.8,2};
+        req->waypoints = std::vector<geometry_msgs::msg::Pose>{current_pose,wp1,wp2,wp3};
+        auto gen_traj_future = generate_trajectory_client_->async_send_request(req);
+        if(gen_traj_future.wait_for(std::chrono::seconds(5)) != std::future_status::ready){
+            RCLCPP_ERROR(node_->get_logger(),"Waited for 5s, no traj generated");
+            return false;
+        }
+        auto gen_res = gen_traj_future.get();
+
+        if(!gen_res->success){
+            RCLCPP_ERROR(node_->get_logger(),"Traj generation failed %s",gen_res->message.c_str());
+            RCLCPP_INFO(LOGGER,"Failed to generate trajectory");
+            return false;
+        }
+
+        RCLCPP_INFO(node_->get_logger(),"Traj generated, now executing");
+        auto exec_traj_future = execute_trajectory_client_->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+        if(exec_traj_future.wait_for(5s) != std::future_status::ready){
+            RCLCPP_ERROR(node_->get_logger(),"Waited for 5s, no traj executed");
+            return false;
+        }
+        auto exec_res = exec_traj_future.get();
+        if(!exec_res->success){
+            RCLCPP_ERROR(node_->get_logger(),"Traj exec failed");
+            return false;
+        }
+        RCLCPP_INFO(node_->get_logger(),"Traj exec succeded");
+
+        rclcpp::sleep_for(std::chrono::milliseconds(1000));
+        
+        current_pose = move_group_interface_->getCurrentPose().pose;
+        RCLCPP_INFO(LOGGER,"Current x:%.2f, y:%.2f, z:%.2f, qw:%.2f,qx:%.2f,qy:%.2f,qz:%.2f",
+            current_pose.position.x,
+            current_pose.position.y,
+            current_pose.position.z,
+            current_pose.orientation.w,
+            current_pose.orientation.x,
+            current_pose.orientation.y,
+            current_pose.orientation.z
+        );
+
+        execute_waypoints_cubic(
+            std::vector<geometry_msgs::msg::Pose>{current_pose,wp1,wp2,wp3},
+            std::vector<double>{0.0,1.0,0.8,2},
+            0.3,
+            0.05
+        );
+
+        execute_waypoints(std::vector<geometry_msgs::msg::Pose>{current_pose,wp1,wp2,wp3});
+    }
+
+    bool execute_waypoints_cubic(std::vector<geometry_msgs::msg::Pose> waypoints, std::vector<double> durations, double average_speed, double waypoint_speed){
+        auto req = std::make_shared<motion_planning_abstractions_msgs::srv::GenerateTrajectory::Request>();
+        req->durations = durations;
+        req->waypoints = waypoints;
+        req->average_speed = average_speed;
+        req->waypoint_speed = waypoint_speed;
+
+        auto gen_traj_future = generate_trajectory_client_->async_send_request(req);
+        if(gen_traj_future.wait_for(std::chrono::seconds(5)) != std::future_status::ready){
+            RCLCPP_ERROR(node_->get_logger(),"Waited for 5s, no traj generated");
+            return false;
+        }
+        auto gen_res = gen_traj_future.get();
+        if(!gen_res->success){
+            RCLCPP_ERROR(node_->get_logger(),"Traj generation failed %s",gen_res->message.c_str());
+            return false;
+        }
+        RCLCPP_INFO(node_->get_logger(),"Traj generated, now executing");
+        auto exec_traj_future = execute_trajectory_client_->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+        if(exec_traj_future.wait_for(5s) != std::future_status::ready){
+            RCLCPP_ERROR(node_->get_logger(),"Waited for 5s, no traj executed");
+            return false;
+        }
+        auto exec_res = exec_traj_future.get();
+        if(!exec_res->success){
+            RCLCPP_ERROR(node_->get_logger(),"Traj exec failed");
+            return false;
+        }
+        RCLCPP_INFO(node_->get_logger(),"Traje exec succeded");
         return true;
     }
 
@@ -164,24 +278,6 @@ public:
 
         response->message = print_pose();
         response->success = true;
-    }
-
-    // EXECUTE WAYPOINTS AND MOVE TO POSE NEED TO BE INVESTIGATED
-    void move_to_pose(const geometry_msgs::msg::Pose &pose){
-        move_group_interface_->setPoseTarget(pose);
-        auto const [success, plan] = [this]{
-            moveit::planning_interface::MoveGroupInterface::Plan msg;
-            auto const ok = static_cast<bool>(this->move_group_interface_->plan(msg));
-            return std::make_pair(ok, msg);
-        }();
-
-        if(success){
-            move_group_interface_->execute(plan);
-        }
-        else{
-            RCLCPP_ERROR(node_->get_logger(), "Planning Failed");
-        }
-        move_group_interface_->clearPoseTargets();
     }
 
     bool execute_waypoints(const std::vector<geometry_msgs::msg::Pose> &waypoints){
@@ -289,7 +385,8 @@ private:
     // subscribers
     
     // clients
-    rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr sample_client_;
+    rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr execute_trajectory_client_;
+    rclcpp::Client<motion_planning_abstractions_msgs::srv::GenerateTrajectory>::SharedPtr generate_trajectory_client_;
 
     // timers
     rclcpp::TimerBase::SharedPtr sample_timer_;

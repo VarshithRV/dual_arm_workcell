@@ -151,25 +151,33 @@ public:
             [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
                 res->success = test_server_callback_();
                 return;
-            }
+            },
+            rmw_qos_profile_services_default,
+            callback_group_
         );
         print_latest_trajectory_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_latest_trajectory",
             [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
                 res->success = print_latest_trajectory_server_callback_();
                 return;
-            }
+            },
+            rmw_qos_profile_services_default,
+            callback_group_
         );
         print_latest_joint_space_trajectory_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_latest_joint_space_trajectory",
             [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
                 res->success = print_latest_joint_space_trajectory_server_callback_();
                 return;
-            }
+            },
+            rmw_qos_profile_services_default,
+            callback_group_
         );
         generate_trajectory_server_ = node_->create_service<motion_planning_abstractions_msgs::srv::GenerateTrajectory>("~/generate_trajectory", 
             [this](motion_planning_abstractions_msgs::srv::GenerateTrajectory::Request::SharedPtr req, motion_planning_abstractions_msgs::srv::GenerateTrajectory::Response::SharedPtr res){
                 generate_trajectory_server_callback_(req,res);
                 return;
-            }
+            },
+            rmw_qos_profile_services_default,
+            callback_group_
         );
 
         //////// REPLACING THE SERVER WITH A TRIGGER BECAUSE ITS HARD TO TEST WITH JUST COMMAND LINE, need to change this before using it properly
@@ -182,7 +190,9 @@ public:
         execute_trajectory_server_ = node_->create_service<std_srvs::srv::Trigger>("~/execute_trajectory", 
             [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
                 res->success = execute_trajectory_server_callback_();
-            }
+            },
+            rmw_qos_profile_services_default,
+            callback_group_
         );
 
         // publisher
@@ -191,7 +201,8 @@ public:
         // action clients
         sjtc_client_ptr_ = rclcpp_action::create_client<control_msgs::action::FollowJointTrajectory>(
             node_,
-            joint_trajectory_controller_ +"/follow_joint_trajectory"            
+            joint_trajectory_controller_ +"/follow_joint_trajectory",
+            callback_group_          
         );
         // wait for the action
         if(!this->sjtc_client_ptr_->wait_for_action_server()){
@@ -206,7 +217,8 @@ public:
                     auto msg = trajectory_msgs::msg::JointTrajectory(*latest_joint_trajectory_); 
                     jt_publisher_->publish(msg);
                 }
-            }
+            },
+            callback_group_
         );
 
         executor_->spin();
@@ -924,50 +936,68 @@ public:
     
     //////// REPLACING THE SERVER WITH A TRIGGER BECAUSE ITS HARD TO TEST WITH JUST COMMAND LINE, need to change this before using it properly
     // user interface to execute trajectory
-    bool execute_trajectory_server_callback_(
-    // motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Request::SharedPtr req,
-    // motion_planning_abstractions_msgs::srv::ExecuteTrajectory::Response::SharedPtr res)
-    )
+    bool execute_trajectory_server_callback_()
     {
         using FollowJointTrajectory = control_msgs::action::FollowJointTrajectory;
-        using GoalHandleFollowJointTrajectory = rclcpp_action::ClientGoalHandle<FollowJointTrajectory>;
-
+        using GoalHandleFollowJointTrajectory =
+            rclcpp_action::ClientGoalHandle<FollowJointTrajectory>;
+    
         if (!sjtc_client_ptr_->wait_for_action_server(std::chrono::seconds(2))) {
             RCLCPP_ERROR(node_->get_logger(), "SJTC action server not available");
-            //////// REPLACING THE SERVER WITH A TRIGGER BECAUSE ITS HARD TO TEST WITH JUST COMMAND LINE, need to change this before using it properly
-            // res->success = false;
-            // res->message = "SJTC action server not available";
             return false;
         }
-
+    
+        if (latest_joint_trajectory_ == nullptr) {
+            RCLCPP_ERROR(node_->get_logger(), "No trajectory generated yet");
+            return false;
+        }
+    
         FollowJointTrajectory::Goal sjtc_goal;
-
-        if(latest_joint_trajectory_ ==nullptr){
-            RCLCPP_ERROR(node_->get_logger(),"No trajectory generated yet");
+        sjtc_goal.trajectory = *latest_joint_trajectory_;
+    
+        RCLCPP_INFO(node_->get_logger(), "Sending trajectory to SJTC action");
+    
+        auto goal_future = sjtc_client_ptr_->async_send_goal(sjtc_goal);
+    
+        if (goal_future.wait_for(std::chrono::seconds(10)) != std::future_status::ready) {
+            RCLCPP_ERROR(node_->get_logger(), "Timed out waiting for goal response");
             return false;
         }
-        //////// REPLACING THE SERVER WITH A TRIGGER BECAUSE ITS HARD TO TEST WITH JUST COMMAND LINE, need to change this before using it properly
-        sjtc_goal.trajectory = *latest_joint_trajectory_;
-        // sjtc_goal.trajectory = req->trajectory;
-
-        RCLCPP_INFO(node_->get_logger(), "Sending trajectory to SJTC action");
-
-        // INTERFACE WITH THE SJTC controller
-        auto send_goal_options =
-        rclcpp_action::Client<FollowJointTrajectory>::SendGoalOptions();
-
-        send_goal_options.goal_response_callback =
-        [this](const GoalHandleFollowJointTrajectory::SharedPtr & goal_handle)
-        {
-            if (!goal_handle) {
-                RCLCPP_ERROR(node_->get_logger(), "Goal was rejected by the server");
-            } else {
-                RCLCPP_INFO(node_->get_logger(), "Goal was accepted by the server");
-            }
-        };
-
-        sjtc_client_ptr_->async_send_goal(sjtc_goal, send_goal_options);
-
+    
+        auto goal_handle = goal_future.get();
+        if (!goal_handle) {
+            RCLCPP_ERROR(node_->get_logger(), "Goal was rejected by the server");
+            return false;
+        }
+    
+        RCLCPP_INFO(node_->get_logger(), "Goal was accepted by the server");
+    
+        auto result_future = sjtc_client_ptr_->async_get_result(goal_handle);
+    
+        if (result_future.wait_for(std::chrono::minutes(2)) != std::future_status::ready) {
+            RCLCPP_ERROR(node_->get_logger(), "Timed out waiting for SJTC result");
+            return false;
+        }
+    
+        auto wrapped_result = result_future.get();
+    
+        switch (wrapped_result.code) {
+            case rclcpp_action::ResultCode::SUCCEEDED:
+                RCLCPP_INFO(node_->get_logger(), "SJTC execution succeeded");
+                return true;
+        
+            case rclcpp_action::ResultCode::ABORTED:
+                RCLCPP_ERROR(node_->get_logger(), "SJTC execution aborted");
+                return false;
+        
+            case rclcpp_action::ResultCode::CANCELED:
+                RCLCPP_ERROR(node_->get_logger(), "SJTC execution canceled");
+                return false;
+        
+            default:
+                RCLCPP_ERROR(node_->get_logger(), "Unknown SJTC result code");
+                return false;
+        }
     }
 
     // TEST SERVER CALLBACK HERE
