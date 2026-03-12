@@ -116,6 +116,13 @@ pose_tracker
 DESTINATION lib/${PROJECT_NAME}
 )
 
+add_executable(bare_bones_moveit src/bare_bones_moveit.cpp)
+ament_target_dependencies(bare_bones_moveit ${THIS_PACKAGE_INCLUDE_DEPENDS})
+install(TARGETS
+bare_bones_moveit
+DESTINATION lib/${PROJECT_NAME}
+)
+
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 

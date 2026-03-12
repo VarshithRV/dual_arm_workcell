@@ -172,6 +172,24 @@ def launch_setup(context, *args, **kwargs):
 
     #### nodes
 
+    bare_bones_moveit_node = Node(
+        package="motion_planning_abstractions",
+        executable="bare_bones_moveit",
+        name="bare_bones_moveit",
+        output="screen",
+        parameters=[
+            robot_description,
+            robot_description_semantic,
+            robot_description_kinematics,
+            {"use_sim_time": use_sim_time},
+            {
+                "planning_group": "left_ur16e",
+                "endeffector_link": "left_tool0",
+                "arm_side": "left",
+            },
+        ]
+    )
+
     left_pose_tracking_node = Node(
         package="motion_planning_abstractions",
         executable="pose_tracker",
@@ -388,6 +406,7 @@ def launch_setup(context, *args, **kwargs):
         # left_pose_tracking_node,
         # rws_pick_and_place_server,
         right_task_space_cubic_polynomial_trajectory_server,
+        bare_bones_moveit_node,
         # suction_pick_and_place_server,
         # left_preaction_server,
         # right_preaction_server,
