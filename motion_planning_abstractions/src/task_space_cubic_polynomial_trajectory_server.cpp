@@ -393,7 +393,7 @@ public:
     // provide the starting and ending velocity as 0.0, if not given, will be enforced anyways
     // if the lengths of the two vectors are different, then it will fail
     std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>>
-    waypointPlanning(std::vector<geometry_msgs::msg::Pose> waypoints,std::vector<double> waypoint_velocities){
+    waypointPlanning(std::vector<geometry_msgs::msg::Pose> waypoints,std::vector<double> waypoint_velocities,std::vector<double> durations_request){
         if (waypoints.size() != waypoint_velocities.size() || waypoints.empty()) {
             return nullptr;
         }
@@ -429,12 +429,31 @@ public:
                 }
             }
         }
-    
-        for (int i = 0; i < static_cast<int>(waypoints.size()) - 1; ++i) {
-            Eigen::Vector3d displacement = waypoints_positions[i + 1] - waypoints_positions[i];
-            Eigen::AngleAxisd angular_displacement(waypoints_orientations[i+1]*waypoints_orientations[i].inverse());
-            durations.push_back(std::max(displacement.norm() / average_velocity_, angular_displacement.angle()/average_angular_velocity_ ));
+        
+        if(durations_request.size()==0){
+            for (int i = 0; i < static_cast<int>(waypoints.size()) - 1; ++i) {
+                Eigen::Vector3d displacement = waypoints_positions[i + 1] - waypoints_positions[i];
+                Eigen::AngleAxisd angular_displacement(waypoints_orientations[i+1]*waypoints_orientations[i].inverse());
+                durations.push_back(std::max(displacement.norm() / average_velocity_, angular_displacement.angle()/average_angular_velocity_ ));
+            }
         }
+        else{
+            // shift duration_request on unit to the left, and copy it to durations
+            durations_request.erase(durations_request.begin());
+            for(int i =0; i < static_cast<int>(waypoints.size()) -1; i++){
+                Eigen::Vector3d displacement = waypoints_positions[i + 1] - waypoints_positions[i];
+                Eigen::AngleAxisd angular_displacement(waypoints_orientations[i+1]*waypoints_orientations[i].inverse());
+                double min_allowable_duration = std::max(displacement.norm() / max_average_velocity_, angular_displacement.angle()/max_average_angular_velocity_ );
+                if(durations_request[i] < min_allowable_duration){
+                    RCLCPP_WARN(node_->get_logger(),"duration request %d, %.2f was lesser than allowable, modified to %.2f"
+                    , i, durations_request[i], min_allowable_duration
+                    );
+                    durations_request[i] = min_allowable_duration;
+                }
+            }
+            durations = durations_request;
+        }
+
         durations.push_back(0.0);
 
         // adding this print for debugging
@@ -735,6 +754,7 @@ public:
         motion_planning_abstractions_msgs::srv::GenerateTrajectory::Response::SharedPtr res
     ){
         std::vector<geometry_msgs::msg::Pose> waypoints(req->waypoints);
+        std::vector<double> durations(req->durations);
         waypoint_velocity_ = req->waypoint_speed;
         average_velocity_ = req->average_speed;
 
@@ -750,16 +770,45 @@ public:
         Eigen::Vector3d first_waypoint_position(first_waypoint.position.x,first_waypoint.position.y,first_waypoint.position.z);
         Eigen::Quaterniond first_waypoint_orientation(first_waypoint.orientation.w,first_waypoint.orientation.x,first_waypoint.orientation.y,first_waypoint.orientation.z);
         
-        RCLCPP_INFO(node_->get_logger(),"Current robot position : %.2f, %.2f, %.2f",current_position[0],current_position[1],current_position[2]);
-        RCLCPP_INFO(node_->get_logger(),"First robot position : %.2f, %.2f, %.2f",first_waypoint_position[0],first_waypoint_position[1],first_waypoint_position[2]);
-        RCLCPP_INFO(node_->get_logger(),"Current robot orientation : %.2f, %.2f, %.2f, %.2f",current_orientation.w(),current_orientation.x(),current_orientation.y(),current_orientation.z());
-        RCLCPP_INFO(node_->get_logger(),"First robot orientation : %.2f, %.2f, %.2f, %.2f",first_waypoint_orientation.w(),first_waypoint_orientation.x(),first_waypoint_orientation.y(),first_waypoint_orientation.z());
+        // RCLCPP_INFO(node_->get_logger(),"Current robot position : %.2f, %.2f, %.2f",current_position[0],current_position[1],current_position[2]);
+        // RCLCPP_INFO(node_->get_logger(),"First robot position : %.2f, %.2f, %.2f",first_waypoint_position[0],first_waypoint_position[1],first_waypoint_position[2]);
+        // RCLCPP_INFO(node_->get_logger(),"Current robot orientation : %.2f, %.2f, %.2f, %.2f",current_orientation.w(),current_orientation.x(),current_orientation.y(),current_orientation.z());
+        // RCLCPP_INFO(node_->get_logger(),"First robot orientation : %.2f, %.2f, %.2f, %.2f",first_waypoint_orientation.w(),first_waypoint_orientation.x(),first_waypoint_orientation.y(),first_waypoint_orientation.z());
 
         double linear_deviation=(first_waypoint_position-current_position).norm();
         double angular_deviation = (Eigen::AngleAxisd(first_waypoint_orientation*current_orientation.inverse())).angle();
 
+        if(durations.size()!=0 && durations.size()!=waypoints.size()){
+            RCLCPP_ERROR(node_->get_logger(),"Size mismatch between the durations and the waypoints, invalid request");
+            res->fraction = 0;
+            res->success = false;
+            res->message = "No trajectory generated";
+            return;
+        }
+
         if(std::abs(linear_deviation)>1e-3 || std::abs(angular_deviation)>1e-2){
             waypoints.insert(waypoints.begin(),current_pose);
+            if(durations.size()!=0.0){
+                if(durations.front()==0.0){
+                    RCLCPP_ERROR(node_->get_logger(),"The first pose is not the current pose and the the first duration is 0, invalid request");
+                    res->fraction = 0;
+                    res->success = false;
+                    res->message = "No trajectory generated";
+                    return;
+                }
+                durations.insert(durations.begin(),0.0);
+            }
+        }
+        else{
+            if(durations.size()!=0.0){
+                if(durations.front()!=0.0){
+                    RCLCPP_ERROR(node_->get_logger(),"The first pose is the current pose and the first duration is not 0, invalid request");
+                    res->fraction = 0;
+                    res->success = false;
+                    res->message = "No trajectory generated";
+                    return;
+                }
+            }
         }
 
         std::vector<double> waypoint_velocities;
@@ -771,15 +820,9 @@ public:
         }
 
         RCLCPP_INFO(node_->get_logger(),"Wayopints and corresponding velocities");
-        
-        // for(int i=0; i < waypoint_velocities.size();i++){
-        //     RCLCPP_INFO(node_->get_logger(),"Waypoint position: %.2f, %.2f, %.2f",waypoints[i].position.x,waypoints[i].position.y,waypoints[i].position.z);
-        //     RCLCPP_INFO(node_->get_logger(),"Waypoint orientation: %.2f, %.2f, %.2f, %.2f",waypoints[i].orientation.w,waypoints[i].orientation.x,waypoints[i].orientation.y,waypoints[i].orientation.z);
-        //     RCLCPP_INFO(node_->get_logger(),"Waypoint velocity: %.2f",waypoint_velocities[i]);
-        // }
 
         // plan a task space path
-        auto ts_traj = waypointPlanning(waypoints,waypoint_velocities);
+        auto ts_traj = waypointPlanning(waypoints,waypoint_velocities,durations);
         if(ts_traj==nullptr){
             res->fraction = 0;
             res->message = "task space trajectory generation failed";
@@ -969,7 +1012,7 @@ public:
         wp4.orientation.z =  0.328;
         wp4.orientation.w =  0.626;
 
-        std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>> trajectory = waypointPlanning(std::vector<geometry_msgs::msg::Pose>{wp1,wp2,wp3,wp4},std::vector<double>{0.0,0.1,0.2,0.0});
+        std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>> trajectory = waypointPlanning(std::vector<geometry_msgs::msg::Pose>{wp1,wp2,wp3,wp4},std::vector<double>{0.0,0.1,0.2,0.0},std::vector<double>{2,2,2,2});
         latest_trajectory_ = trajectory;
         std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>> js_traj = generate_js_traj(trajectory);
 
@@ -1179,6 +1222,8 @@ private:
     std::shared_ptr<trajectory_msgs::msg::JointTrajectory> latest_joint_trajectory_;
     double average_velocity_=0.3; // change this to make pt to pt traj faster or slower by making this bigger or smaller
     double average_angular_velocity_=M_PI/6; // change this to make pt to pt traj faster or slower by making this bigger or smaller
+    double max_average_velocity_=0.5; // use this to change behaviour of time deterministic planning
+    double max_average_angular_velocity_=M_PI/3; // use this to change behaviour of time deterministic planning
     double waypoint_velocity_ = 0.05; // change this to make the robot slower or faster at waypoints
     double dt_=0.05; //trajectory interval
     

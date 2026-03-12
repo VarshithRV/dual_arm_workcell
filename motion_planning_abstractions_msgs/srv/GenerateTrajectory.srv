@@ -1,6 +1,10 @@
-geometry_msgs/Pose[] waypoints
+geometry_msgs/Pose[] waypoints 
 float32 average_speed 0.3 # speed between waypoints
 float32 waypoint_speed 0.05 # speed at the waypoints
+float64[] durations # is overloaded with average speed, if both are given, durations will be considered
+# it must have the same dimension as waypoints
+# the robot will be there at waypoint[i] at sum(duration[j], till i)
+# if duration exceeds robot speed above maximum allowable speed, then it a different duration will be chosed
 ---
 trajectory_msgs/JointTrajectory trajectory
 bool success
