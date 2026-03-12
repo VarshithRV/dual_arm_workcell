@@ -246,13 +246,14 @@ def launch_setup(context, *args, **kwargs):
             robot_description_semantic,
             robot_description_kinematics,
             {
-                "planning_group": "right_ur16e",
-                "endeffector_link": "right_tool0",
-                "arm_side":"right",
-                "maximum_task_space_velocity":1.0, # in ms-1
-                "maximum_task_space_acceleration":3.0, # in ms-2
-                "maximum_joint_space_velocity":3.14, # in rads-1
-                "maximum_joint_space_acceleration":3.14, # in rads-2
+                "planning_group_" : "right_ur16e",
+                "maximum_task_space_velocity_" : 1.0,
+                "maximum_task_space_acceleration_" : 3.0,
+                "maximum_joint_space_velocity_" : 3.15,
+                "maximum_joint_space_acceleration_" : 3.14,
+                "arm_side" : "right",
+                "joint_trajectory_controller_" : "right_scaled_joint_trajectory_controller",
+                "endeffector_link_" : "right_tool0",
             },
             {"use_sim_time":use_sim_time},
         ],
