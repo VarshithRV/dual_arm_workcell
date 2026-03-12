@@ -75,16 +75,22 @@ public:
         node_ = std::make_shared<rclcpp::Node>("ts_cubic_polnomial_traj_server");
 
         // parameter declaration
+        // flag
         node_->declare_parameter<std::string>("planning_group", "right_ur16e");
         node_->declare_parameter<double>("maximum_task_space_velocity",1.0); // in ms-1
         node_->declare_parameter<double>("maximum_task_space_acceleration",3.0); // in ms-2
         node_->declare_parameter<double>("maximum_joint_space_velocity",M_PI); // in rads-1
         node_->declare_parameter<double>("maximum_joint_space_acceleration",M_PI); // in rads-2
+        // flag
         node_->declare_parameter<std::string>("arm_side", "right");
+        // flag
         node_->declare_parameter<std::string>("joint_trajectory_controller", "right_scaled_joint_trajectory_controller");
+        // flag
         node_->declare_parameter<std::string>("endeffector_link", "right_tool0");
+
         
         // parameter assignment
+        // flag
         planning_group_ = node_->get_parameter("planning_group").as_string();
         maximum_task_space_velocity_ = node_->get_parameter("maximum_task_space_velocity").as_double();
         maximum_task_space_acceleration_ = node_->get_parameter("maximum_task_space_acceleration").as_double();
@@ -93,6 +99,19 @@ public:
         arm_side = node_->get_parameter("arm_side").as_string();
         joint_trajectory_controller_ = node_->get_parameter("joint_trajectory_controller").as_string();
         endeffector_link_ = node_->get_parameter("endeffector_link").as_string();
+
+        RCLCPP_INFO(node_->get_logger(), "========== TSCubicPolynomialTraj Parameters ==========");
+        RCLCPP_INFO(node_->get_logger(), "planning_group                : %s", planning_group_.c_str());
+        RCLCPP_INFO(node_->get_logger(), "arm_side                      : %s", arm_side.c_str());
+        RCLCPP_INFO(node_->get_logger(), "endeffector_link              : %s", endeffector_link_.c_str());
+        RCLCPP_INFO(node_->get_logger(), "joint_trajectory_controller   : %s", joint_trajectory_controller_.c_str());
+
+        RCLCPP_INFO(node_->get_logger(), "maximum_task_space_velocity   : %.6f m/s", maximum_task_space_velocity_);
+        RCLCPP_INFO(node_->get_logger(), "maximum_task_space_acceleration: %.6f m/s^2", maximum_task_space_acceleration_);
+        RCLCPP_INFO(node_->get_logger(), "maximum_joint_space_velocity  : %.6f rad/s", maximum_joint_space_velocity_);
+        RCLCPP_INFO(node_->get_logger(), "maximum_joint_space_acceleration: %.6f rad/s^2", maximum_joint_space_acceleration_);
+
+        RCLCPP_INFO(node_->get_logger(), "======================================================");
 
         system_clock_ = rclcpp::Clock(RCL_SYSTEM_TIME);
         
@@ -119,6 +138,7 @@ public:
         
         current_robot_state_=std::make_shared<moveit::core::RobotState>(kinematic_model_);
         current_robot_state_->setToDefaultValues();
+        // flag
         joint_group_model_ = kinematic_model_->getJointModelGroup(planning_group_);
         const std::vector<std::string>& joint_names = joint_group_model_->getVariableNames();
         std::vector<double> joint_values;
