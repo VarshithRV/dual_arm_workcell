@@ -123,6 +123,13 @@ bare_bones_moveit
 DESTINATION lib/${PROJECT_NAME}
 )
 
+add_executable(dual_arm_control_template src/dual_arm_control_template.cpp)
+ament_target_dependencies(dual_arm_control_template ${THIS_PACKAGE_INCLUDE_DEPENDS})
+install(TARGETS
+dual_arm_control_template
+DESTINATION lib/${PROJECT_NAME}
+)
+
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 
