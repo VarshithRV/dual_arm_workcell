@@ -918,6 +918,7 @@ public:
         res->fraction = 100;
         res->success = true;
         res->message = "joint space trajectory generation succeeded";
+
     }
 
     
