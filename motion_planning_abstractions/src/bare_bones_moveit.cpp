@@ -1,45 +1,28 @@
 // task space cubic polnomial traj server
 
 #include <memory>
-#include <functional>
 #include <string>
 #include <chrono>
-#include <cstdlib>
-#include <thread>
 #include <vector>
 #include <cmath>
-#include <future>
 #include <sstream>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/executors/multi_threaded_executor.hpp"
-#include "rclcpp_action/rclcpp_action.hpp"
-#include "rclcpp_components/register_node_macro.hpp"
 
 #include "geometry_msgs/msg/pose.hpp"
-#include "geometry_msgs/msg/point.hpp"
-#include "geometry_msgs/msg/wrench.hpp"
-#include "geometry_msgs/msg/twist.hpp"
 
-#include "control_msgs/action/follow_joint_trajectory.hpp"
+#include "std_srvs/srv/trigger.hpp"
 
 #include "moveit/move_group_interface/move_group_interface.h"
 #include "moveit_msgs/msg/robot_trajectory.hpp"
-#include "rmw/qos_profiles.h"
-#include "std_srvs/srv/trigger.hpp"
-#include "rosidl_runtime_cpp/traits.hpp"
+
 #include "Eigen/Dense"
 #include "Eigen/Geometry"
-#include "motion_planning_abstractions_msgs/srv/generate_trajectory.hpp"
-#include "motion_planning_abstractions_msgs/srv/execute_trajectory.hpp"
-#include "trajectory_msgs/msg/joint_trajectory.hpp"
 
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_state/robot_state.h>
-
-#include <tf2/LinearMath/Quaternion.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 
 using namespace std::chrono_literals;
