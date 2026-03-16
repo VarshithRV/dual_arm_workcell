@@ -190,6 +190,21 @@ def launch_setup(context, *args, **kwargs):
         ]
     )
 
+    dual_arm_control_template_node = Node(
+        package="motion_planning_abstractions",
+        executable="dual_arm_control_template",
+        name="dual_arm_control_template",
+        output="screen",
+        parameters=[
+            robot_description,
+            robot_description_semantic,
+            robot_description_kinematics,
+            {"use_sim_time": use_sim_time},
+            {
+            },
+        ]
+    )
+
     left_pose_tracking_node = Node(
         package="motion_planning_abstractions",
         executable="pose_tracker",
@@ -254,11 +269,34 @@ def launch_setup(context, *args, **kwargs):
         ],
     )
 
+    left_task_space_cubic_polynomial_trajectory_server = Node(
+        package="motion_planning_abstractions",
+        executable="task_space_cubic_polynomial_trajectory_server",
+        name="left_task_space_cubic_polynomial_trajectory_server",
+        # output="screen",
+        parameters=[
+            robot_description,
+            robot_description_semantic,
+            robot_description_kinematics,
+            {
+                "planning_group" : "left_ur16e",
+                "maximum_task_space_velocity" : 1.0,
+                "maximum_task_space_acceleration" : 3.0,
+                "maximum_joint_space_velocity" : 3.15,
+                "maximum_joint_space_acceleration" : 3.14,
+                "arm_side" : "left",
+                "joint_trajectory_controller" : "left_scaled_joint_trajectory_controller",
+                "endeffector_link" : "left_tool0",
+            },
+            {"use_sim_time":use_sim_time},
+        ],
+    )
+    
     right_task_space_cubic_polynomial_trajectory_server = Node(
         package="motion_planning_abstractions",
         executable="task_space_cubic_polynomial_trajectory_server",
         name="right_task_space_cubic_polynomial_trajectory_server",
-        output="screen",
+        # output="screen",
         parameters=[
             robot_description,
             robot_description_semantic,
@@ -405,11 +443,13 @@ def launch_setup(context, *args, **kwargs):
     nodes_to_start = [
         # left_pose_tracking_node,
         # rws_pick_and_place_server,
+        left_task_space_cubic_polynomial_trajectory_server,
         right_task_space_cubic_polynomial_trajectory_server,
-        bare_bones_moveit_node,
+        # bare_bones_moveit_node,
+        dual_arm_control_template_node,
         # suction_pick_and_place_server,
-        # left_preaction_server,
-        # right_preaction_server,
+        left_preaction_server,
+        right_preaction_server,
         # left_rest_server,
         # right_rest_server,
     ]

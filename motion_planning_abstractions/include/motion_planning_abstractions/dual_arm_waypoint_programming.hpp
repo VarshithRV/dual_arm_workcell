@@ -24,7 +24,9 @@ using moveit::planning_interface::MoveGroupInterface;
 
 class BareBonesMoveit{
 public:
-
+    std::shared_ptr<MoveGroupInterface> left_move_group_interface_;
+    std::shared_ptr<MoveGroupInterface> right_move_group_interface_;
+    
     BareBonesMoveit(rclcpp::Node::SharedPtr node)
     {
 
@@ -506,8 +508,6 @@ public:
 private:
     std::thread thread_;
     
-    std::shared_ptr<MoveGroupInterface> left_move_group_interface_;
-    std::shared_ptr<MoveGroupInterface> right_move_group_interface_;
     rclcpp::Node::SharedPtr node_;
     
     rclcpp::executors::MultiThreadedExecutor::SharedPtr executor_;

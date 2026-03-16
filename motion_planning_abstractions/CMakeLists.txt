@@ -133,6 +133,9 @@ DESTINATION lib/${PROJECT_NAME}
 
 add_executable(dual_arm_control_template src/dual_arm_control_template.cpp)
 ament_target_dependencies(dual_arm_control_template ${THIS_PACKAGE_INCLUDE_DEPENDS})
+target_include_directories(dual_arm_control_template PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
 install(TARGETS
 dual_arm_control_template
 DESTINATION lib/${PROJECT_NAME}
