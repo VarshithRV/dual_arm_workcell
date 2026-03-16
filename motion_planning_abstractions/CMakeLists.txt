@@ -71,6 +71,14 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(
+  DIRECTORY include/
+  DESTINATION include
+)
+
+ament_export_include_directories(include)
+ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
+
 add_executable(predefined_state_server src/predefined_state_server.cpp)
 ament_target_dependencies(predefined_state_server ${THIS_PACKAGE_INCLUDE_DEPENDS})
 install(TARGETS
