@@ -20,9 +20,19 @@ from launch_param_builder import ParameterBuilder
 import os
 import yaml
 import xacro
+import math
 
 
 def launch_setup(context, *args, **kwargs):
+    left_robot_ip = LaunchConfiguration('left_robot_ip')
+    left_translation = [-0.331,0.529,0.006]
+    left_rotation = [0.0,0.0,math.pi/2] 
+    left_tool0 = [0.0,0.0,0.189] # left tool0
+    right_robot_ip = LaunchConfiguration('right_robot_ip')
+    right_translation = [0.587,0.542,0.001]
+    right_rotation = [0.0,0.0,math.pi/2]
+    right_tool0 = [0.0,0.0,0.125] # right tool0
+    
     description_package = LaunchConfiguration("description_package")
     description_file = LaunchConfiguration("description_file")
     _publish_robot_description_semantic = LaunchConfiguration("publish_robot_description_semantic")
@@ -96,6 +106,33 @@ def launch_setup(context, *args, **kwargs):
             "left_output_recipe_filename:=",
             "rtde_output_recipe.txt",
             " ",
+            "left_translation_x:=",
+            str(left_translation[0]),
+            " ",
+            "left_translation_y:=",
+            str(left_translation[1]),
+            " ",
+            "left_translation_z:=",
+            str(left_translation[2]),
+            " ",
+            "left_rotation_r:=",
+            str(left_rotation[0]),
+            " ",
+            "left_rotation_p:=",
+            str(left_rotation[1]),
+            " ",
+            "left_rotation_y:=",
+            str(left_rotation[2]),
+            " ",
+            "left_tool0_x:=",
+            str(left_tool0[0]),
+            " ",
+            "left_tool0_y:=",
+            str(left_tool0[1]),
+            " ",
+            "left_tool0_z:=",
+            str(left_tool0[2]),
+            " ",
             "right_robot_ip:=xxx.yyy.zzz.www",
             " ",
             "right_tf_prefix:=right_",
@@ -132,6 +169,34 @@ def launch_setup(context, *args, **kwargs):
             " ",
             "right_output_recipe_filename:=",
             "rtde_output_recipe.txt",
+            " ",
+            "right_translation_x:=",
+            str(right_translation[0]),
+            " ",
+            "right_translation_y:=",
+            str(right_translation[1]),
+            " ",
+            "right_translation_z:=",
+            str(right_translation[2]),
+            " ",
+            "right_rotation_r:=",
+            str(right_rotation[0]),
+            " ",
+            "right_rotation_p:=",
+            str(right_rotation[1]),
+            " ",
+            "right_rotation_y:=",
+            str(right_rotation[2]),
+            " ",
+            "right_tool0_x:=",
+            str(right_tool0[0]),
+            " ",
+            "right_tool0_y:=",
+            str(right_tool0[1]),
+            " ",
+            "right_tool0_z:=",
+            str(right_tool0[2]),
+            " ",
         ]
     )
 
@@ -241,6 +306,8 @@ def launch_setup(context, *args, **kwargs):
     name="rws_pick_and_place_server",
     output="screen",
     parameters=[
+        robot_description,
+        robot_description_semantic,
         robot_description_kinematics,
         {
             "planning_group": "right_ur16e",
@@ -321,6 +388,8 @@ def launch_setup(context, *args, **kwargs):
     name="suction_pick_and_place_server",
     output="screen",
     parameters=[
+        robot_description,
+        robot_description_semantic,
         robot_description_kinematics,
         {
             "planning_group": "left_ur16e",
@@ -383,6 +452,8 @@ def launch_setup(context, *args, **kwargs):
         name="right_preaction_server",
         output="screen",
         parameters=[
+            robot_description,
+            robot_description_semantic,
             robot_description_kinematics,
             {
                 "planning_group": "right_ur16e",
@@ -404,6 +475,8 @@ def launch_setup(context, *args, **kwargs):
         name="left_rest_server",
         output="screen",
         parameters=[
+            robot_description,
+            robot_description_semantic,
             robot_description_kinematics,
             {
                 "planning_group": "left_ur16e",
@@ -425,6 +498,8 @@ def launch_setup(context, *args, **kwargs):
         name="right_rest_server",
         output="screen",
         parameters=[
+            robot_description,
+            robot_description_semantic,
             robot_description_kinematics,
             {
                 "planning_group": "right_ur16e",
