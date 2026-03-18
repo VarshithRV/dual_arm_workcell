@@ -53,6 +53,8 @@ class PredefinedStateServer{
             move_group_interface_ = std::make_shared<MoveGroupInterface>(moveit_node_, planning_group_);
             
             move_group_interface_->startStateMonitor();
+            move_group_interface_->setMaxVelocityScalingFactor(1.0);
+            move_group_interface_->setMaxAccelerationScalingFactor(1.0);
             
             executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
             executor_->add_node(node_);
