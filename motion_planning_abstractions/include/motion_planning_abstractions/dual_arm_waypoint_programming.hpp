@@ -10,6 +10,7 @@
 #include "rclcpp/executors/multi_threaded_executor.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "std_srvs/srv/trigger.hpp"
+#include "ur_msgs/srv/set_io.hpp"
 #include "moveit/move_group_interface/move_group_interface.h"
 #include "moveit_msgs/msg/robot_trajectory.hpp"
 #include "motion_planning_abstractions_msgs/srv/generate_trajectory.hpp"
@@ -90,6 +91,9 @@ public:
         left_generate_trajectory_client_ = node_->create_client<motion_planning_abstractions_msgs::srv::GenerateTrajectory>("/left_task_space_cubic_polynomial_trajectory_server/generate_trajectory");
         right_generate_trajectory_client_ = node_->create_client<motion_planning_abstractions_msgs::srv::GenerateTrajectory>("/right_task_space_cubic_polynomial_trajectory_server/generate_trajectory");
 
+        left_set_io_client_ = node_->create_client<ur_msgs::srv::SetIO>("left_io_and_status_controller/set_io");
+        right_set_io_client_ = node_->create_client<ur_msgs::srv::SetIO>("right_io_and_status_controller/set_io");
+        
         if(!left_execute_trajectory_client_->wait_for_service(5s)){
             RCLCPP_ERROR(node_->get_logger(),"No /left_task_space_cubic_polynomial_trajectory_server/execute_trajectory, timed out while waiting");
         }
@@ -538,6 +542,8 @@ private:
     rclcpp::Client<motion_planning_abstractions_msgs::srv::GenerateTrajectory>::SharedPtr left_generate_trajectory_client_;
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr right_execute_trajectory_client_;
     rclcpp::Client<motion_planning_abstractions_msgs::srv::GenerateTrajectory>::SharedPtr right_generate_trajectory_client_;
+    rclcpp::Client<ur_msgs::srv::SetIO>::SharedPtr left_set_io_client_;
+    rclcpp::Client<ur_msgs::srv::SetIO>::SharedPtr right_set_io_client_;
 
     // timers
     rclcpp::TimerBase::SharedPtr sample_timer_;
