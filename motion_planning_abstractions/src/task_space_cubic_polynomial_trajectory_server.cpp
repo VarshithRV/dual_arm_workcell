@@ -100,7 +100,6 @@ public:
         joint_trajectory_controller_ = node_->get_parameter("joint_trajectory_controller").as_string();
         endeffector_link_ = node_->get_parameter("endeffector_link").as_string();
 
-        RCLCPP_INFO(node_->get_logger(), "========== TSCubicPolynomialTraj Parameters ==========");
         RCLCPP_INFO(node_->get_logger(), "planning_group                : %s", planning_group_.c_str());
         RCLCPP_INFO(node_->get_logger(), "arm_side                      : %s", arm_side.c_str());
         RCLCPP_INFO(node_->get_logger(), "endeffector_link              : %s", endeffector_link_.c_str());
@@ -110,8 +109,6 @@ public:
         RCLCPP_INFO(node_->get_logger(), "maximum_task_space_acceleration: %.6f m/s^2", maximum_task_space_acceleration_);
         RCLCPP_INFO(node_->get_logger(), "maximum_joint_space_velocity  : %.6f rad/s", maximum_joint_space_velocity_);
         RCLCPP_INFO(node_->get_logger(), "maximum_joint_space_acceleration: %.6f rad/s^2", maximum_joint_space_acceleration_);
-
-        RCLCPP_INFO(node_->get_logger(), "======================================================");
 
         system_clock_ = rclcpp::Clock(RCL_SYSTEM_TIME);
         

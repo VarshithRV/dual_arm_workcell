@@ -239,8 +239,8 @@ def launch_setup(context, *args, **kwargs):
 
     bare_bones_moveit_node = Node(
         package="motion_planning_abstractions",
-        executable="bare_bones_moveit",
-        name="bare_bones_moveit",
+        executable="bare_bones_moveit_example",
+        name="bare_bones_moveit_example",
         output="screen",
         parameters=[
             robot_description,
@@ -250,7 +250,9 @@ def launch_setup(context, *args, **kwargs):
             {
                 "planning_group": "left_ur16e",
                 "endeffector_link": "left_tool0",
-                "arm_side": "left",
+                "tscubic_gen_traj_ns":"/left_task_space_cubic_polynomial_trajectory_server/generate_trajectory",
+                "tscubic_exec_traj_ns":"/left_task_space_cubic_polynomial_trajectory_server/execute_trajectory",
+                "set_io_ns":"/left_io_and_status_controller/set_io",
             },
         ]
     )
@@ -340,7 +342,7 @@ def launch_setup(context, *args, **kwargs):
         package="motion_planning_abstractions",
         executable="task_space_cubic_polynomial_trajectory_server",
         name="left_task_space_cubic_polynomial_trajectory_server",
-        # output="screen",
+        output="screen",
         parameters=[
             robot_description,
             robot_description_semantic,
@@ -363,7 +365,7 @@ def launch_setup(context, *args, **kwargs):
         package="motion_planning_abstractions",
         executable="task_space_cubic_polynomial_trajectory_server",
         name="right_task_space_cubic_polynomial_trajectory_server",
-        # output="screen",
+        output="screen",
         parameters=[
             robot_description,
             robot_description_semantic,
@@ -520,8 +522,8 @@ def launch_setup(context, *args, **kwargs):
         # rws_pick_and_place_server,
         left_task_space_cubic_polynomial_trajectory_server,
         right_task_space_cubic_polynomial_trajectory_server,
-        # bare_bones_moveit_node,
-        dual_arm_control_template_node,
+        bare_bones_moveit_node,
+        # dual_arm_control_template_node,
         # suction_pick_and_place_server,
         left_preaction_server,
         right_preaction_server,

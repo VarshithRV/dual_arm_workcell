@@ -65,10 +65,19 @@ find_package(trajectory_msgs REQUIRED)
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
+ament_export_include_directories(include)
+ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
 
-install(
-  DIRECTORY launch 
-  DESTINATION share/${PROJECT_NAME}
+add_library(bare_bones_moveit SHARED
+  src/bare_bones_moveit.cpp
+)
+target_include_directories(bare_bones_moveit
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(bare_bones_moveit
+  ${THIS_PACKAGE_INCLUDE_DEPENDS}
 )
 
 install(
@@ -76,8 +85,29 @@ install(
   DESTINATION include
 )
 
+install(
+  TARGETS bare_bones_moveit
+  EXPORT export_bare_bones_moveit
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
+)
+
 ament_export_include_directories(include)
+ament_export_targets(export_bare_bones_moveit HAS_LIBRARY_TARGET)
 ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
+
+add_executable(bare_bones_moveit_example src/bare_bones_moveit_example.cpp)
+ament_target_dependencies(bare_bones_moveit_example ${THIS_PACKAGE_INCLUDE_DEPENDS})
+target_link_libraries(bare_bones_moveit_example bare_bones_moveit)
+target_include_directories(bare_bones_moveit_example PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+install(TARGETS
+bare_bones_moveit_example
+DESTINATION lib/${PROJECT_NAME}
+)
 
 add_executable(predefined_state_server src/predefined_state_server.cpp)
 ament_target_dependencies(predefined_state_server ${THIS_PACKAGE_INCLUDE_DEPENDS})
@@ -124,13 +154,6 @@ pose_tracker
 DESTINATION lib/${PROJECT_NAME}
 )
 
-add_executable(bare_bones_moveit src/bare_bones_moveit.cpp)
-ament_target_dependencies(bare_bones_moveit ${THIS_PACKAGE_INCLUDE_DEPENDS})
-install(TARGETS
-bare_bones_moveit
-DESTINATION lib/${PROJECT_NAME}
-)
-
 add_executable(dual_arm_control_template src/dual_arm_control_template.cpp)
 ament_target_dependencies(dual_arm_control_template ${THIS_PACKAGE_INCLUDE_DEPENDS})
 target_include_directories(dual_arm_control_template PUBLIC
@@ -146,12 +169,7 @@ install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
-  # the following line skips the linter which checks for copyrights
-  # comment the line when a copyright and license is added to all source files
   set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # comment the line when this package is in a git repo and when
-  # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()

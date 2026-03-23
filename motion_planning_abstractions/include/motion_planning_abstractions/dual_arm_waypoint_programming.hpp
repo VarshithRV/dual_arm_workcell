@@ -530,8 +530,6 @@ private:
     // servers
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_state_server_;
 
-    // clients
-
     // publishers
     rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr sample_publisher_;
 
