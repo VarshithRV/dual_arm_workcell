@@ -67,6 +67,12 @@ find_package(trajectory_msgs REQUIRED)
 
 ament_export_include_directories(include)
 ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
+install(
+  DIRECTORY include/
+  DESTINATION include
+)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 add_library(bare_bones_moveit SHARED
   src/bare_bones_moveit.cpp
@@ -79,12 +85,6 @@ target_include_directories(bare_bones_moveit
 ament_target_dependencies(bare_bones_moveit
   ${THIS_PACKAGE_INCLUDE_DEPENDS}
 )
-
-install(
-  DIRECTORY include/
-  DESTINATION include
-)
-
 install(
   TARGETS bare_bones_moveit
   EXPORT export_bare_bones_moveit
@@ -93,9 +93,31 @@ install(
   RUNTIME DESTINATION bin
   INCLUDES DESTINATION include
 )
+ament_export_targets(export_bare_bones_moveit HAS_LIBRARY_TARGET)
+
+
+add_library(ee_servo SHARED
+  src/ee_servo.cpp
+)
+target_include_directories(ee_servo
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(ee_servo
+  ${THIS_PACKAGE_INCLUDE_DEPENDS}
+)
+install(
+  TARGETS ee_servo
+  EXPORT export_ee_servo
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
+)
+ament_export_targets(export_ee_servo HAS_LIBRARY_TARGET)
 
 ament_export_include_directories(include)
-ament_export_targets(export_bare_bones_moveit HAS_LIBRARY_TARGET)
 ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 add_executable(bare_bones_moveit_example src/bare_bones_moveit_example.cpp)
@@ -106,6 +128,17 @@ target_include_directories(bare_bones_moveit_example PUBLIC
 )
 install(TARGETS
 bare_bones_moveit_example
+DESTINATION lib/${PROJECT_NAME}
+)
+
+add_executable(ee_servo_example src/ee_servo_example.cpp)
+ament_target_dependencies(ee_servo_example ${THIS_PACKAGE_INCLUDE_DEPENDS})
+target_link_libraries(ee_servo_example ee_servo)
+target_include_directories(ee_servo_example PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+install(TARGETS
+ee_servo_example
 DESTINATION lib/${PROJECT_NAME}
 )
 

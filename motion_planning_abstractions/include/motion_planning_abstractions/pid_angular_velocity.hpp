@@ -13,7 +13,7 @@ using namespace std::chrono_literals;
 
 class PIDAngularVelocity{
     public:
-        PIDAngularVelocity(){}
+        PIDAngularVelocity(){};
 
         template <class T>
         PIDAngularVelocity(T p_gain, T i_gain, T d_gain, T k_gain, T error_velocity_iir_alpha, T frequency, T error_velocity_window_size){

@@ -257,6 +257,22 @@ def launch_setup(context, *args, **kwargs):
         ]
     )
 
+    ee_servo_example = Node(
+        package="motion_planning_abstractions",
+        executable="ee_servo_example",
+        name="ee_servo_example",
+        output="screen",
+        parameters=[
+            {"use_sim_time": use_sim_time},
+            {
+                "servo_node_ns": "/left_servo_node_main",
+                "joint_traj_controller": "left_scaled_joint_trajectory_controller",
+                "joint_vel_controller": "left_forward_velocity_controller",
+                "alpha":0.8
+            },
+        ]
+    )
+
     dual_arm_control_template_node = Node(
         package="motion_planning_abstractions",
         executable="dual_arm_control_template",
@@ -520,15 +536,16 @@ def launch_setup(context, *args, **kwargs):
     nodes_to_start = [
         # left_pose_tracking_node,
         # rws_pick_and_place_server,
-        left_task_space_cubic_polynomial_trajectory_server,
-        right_task_space_cubic_polynomial_trajectory_server,
-        bare_bones_moveit_node,
+        # left_task_space_cubic_polynomial_trajectory_server,
+        # right_task_space_cubic_polynomial_trajectory_server,
+        # bare_bones_moveit_node,
+        ee_servo_example,
         # dual_arm_control_template_node,
         # suction_pick_and_place_server,
-        left_preaction_server,
-        right_preaction_server,
-        # left_rest_server,
-        # right_rest_server,
+        # left_preaction_server,
+        # right_preaction_server,
+        left_rest_server,
+        right_rest_server,
     ]
     
     return nodes_to_start

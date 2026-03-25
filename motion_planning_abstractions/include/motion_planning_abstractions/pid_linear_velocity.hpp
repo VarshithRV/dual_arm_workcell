@@ -13,6 +13,8 @@ using namespace std::chrono_literals;
 // PID class for getting velocity from position
 class PIDLinearVelocity{
     public:
+        PIDLinearVelocity(){};
+
         template <class T>
         PIDLinearVelocity(T p_gain, T i_gain, T d_gain, T k_gain, T error_velocity_iir_alpha, T frequency, T error_velocity_window_size){
             this->P_GAIN_ = double(p_gain);

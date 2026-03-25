@@ -65,6 +65,7 @@ public:
     // joint space movement
     void move_to_joint_positions(const std::vector<double>joint_positions);
 
+    // print the current joint angles
     void print_state(
         const std_srvs::srv::Trigger::Request::SharedPtr request,
         std_srvs::srv::Trigger::Response::SharedPtr response

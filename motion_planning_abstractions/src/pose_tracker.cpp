@@ -71,8 +71,8 @@ ACTIVE_TRACKING 2 // node state when the node is actively tracking, the robot sh
 #include "geometry_msgs/msg/twist.hpp"
 #include <Eigen/Geometry>
 
-#include "pid_linear_velocity.hpp"
-#include "pid_angular_velocity.hpp"
+#include "motion_planning_abstractions/pid_linear_velocity.hpp"
+#include "motion_planning_abstractions/pid_angular_velocity.hpp"
 
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>

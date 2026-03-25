@@ -446,8 +446,6 @@ void BareBonesMoveit::do_ik(const geometry_msgs::msg::Pose& eepose){
         RCLCPP_INFO(node_->get_logger(), "Did not find IK solution");
     Eigen::Vector3d reference_point_position(0.0, 0.0, 0.0);
     Eigen::MatrixXd jacobian;
-    current_robot_state_->getJacobian(joint_group_model_,
-                                 current_robot_state_->getLinkModel(joint_group_model_->getLinkModelNames().back()),
-                                 reference_point_position, jacobian);
+    current_robot_state_->getJacobian(joint_group_model_,current_robot_state_->getLinkModel(joint_group_model_->getLinkModelNames().back()),reference_point_position, jacobian);
     RCLCPP_INFO_STREAM(node_->get_logger(), "Jacobian: \n" << jacobian << "\n");
 }
