@@ -290,7 +290,7 @@ def launch_setup(context, *args, **kwargs):
 
     left_pose_tracking_node = Node(
         package="motion_planning_abstractions",
-        executable="pose_tracker",
+        executable="pose_tracker_node",
         name="left_pose_tracker",
         output="screen",
         parameters=[

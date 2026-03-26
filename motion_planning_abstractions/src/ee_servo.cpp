@@ -34,7 +34,14 @@ using moveit::planning_interface::MoveGroupInterface;
 EEServo::EEServo(){}
 
 EEServo::EEServo(rclcpp::Node::SharedPtr node){
-    node_ = node;
+    
+    if(node!=nullptr)
+        node_ = node;
+    else{
+        std::cout<<"No node passed!!!"<<std::endl;
+        return;
+    }
+
     auto LOGGER = node_->get_logger();
     
     wall_clock_ = rclcpp::Clock(rcl_clock_type_t::RCL_SYSTEM_TIME);
@@ -274,5 +281,7 @@ bool EEServo::stop_servo_(){
     auto LOGGER = node_->get_logger();
     if(current_state_!=State::NOT_READY){
         current_state_ = State::READY;
+        return true;
     }
+    return false;
 }

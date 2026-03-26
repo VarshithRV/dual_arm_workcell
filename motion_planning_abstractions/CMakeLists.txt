@@ -180,10 +180,10 @@ pick_and_place_ft_feedback_server
 DESTINATION lib/${PROJECT_NAME}
 )
 
-add_executable(pose_tracker src/pose_tracker.cpp)
-ament_target_dependencies(pose_tracker ${THIS_PACKAGE_INCLUDE_DEPENDS})
+add_executable(pose_tracker_node src/pose_tracker_node.cpp)
+ament_target_dependencies(pose_tracker_node ${THIS_PACKAGE_INCLUDE_DEPENDS})
 install(TARGETS
-pose_tracker
+pose_tracker_node
 DESTINATION lib/${PROJECT_NAME}
 )
 
