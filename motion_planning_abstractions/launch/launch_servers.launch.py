@@ -273,6 +273,31 @@ def launch_setup(context, *args, **kwargs):
         ]
     )
 
+    ee_pose_tracker_example = Node(
+        package="motion_planning_abstractions",
+        executable="ee_pose_tracker_example",
+        name="ee_pose_tracker_example",
+        output="screen",
+        parameters=[
+            {"use_sim_time": use_sim_time},
+            {
+                "planning_group": "left_ur16e",
+                "endeffector_link": "left_tool0",
+                "tscubic_gen_traj_ns":"/left_task_space_cubic_polynomial_trajectory_server/generate_trajectory",
+                "tscubic_exec_traj_ns":"/left_task_space_cubic_polynomial_trajectory_server/execute_trajectory",
+                "set_io_ns":"/left_io_and_status_controller/set_io",
+                "servo_node_ns": "/left_servo_node_main",
+                "joint_traj_controller": "left_scaled_joint_trajectory_controller",
+                "joint_vel_controller": "left_forward_velocity_controller",
+                "alpha":0.8,
+                "linear_P":1.0,
+                "linear_D":0.0,
+                "angular_P":1.0,
+                "angular_D":0.0,
+            }
+        ]
+    )
+
     dual_arm_control_template_node = Node(
         package="motion_planning_abstractions",
         executable="dual_arm_control_template",
@@ -539,7 +564,8 @@ def launch_setup(context, *args, **kwargs):
         # left_task_space_cubic_polynomial_trajectory_server,
         # right_task_space_cubic_polynomial_trajectory_server,
         # bare_bones_moveit_node,
-        ee_servo_example,
+        # ee_servo_example,
+        ee_pose_tracker_example,
         # dual_arm_control_template_node,
         # suction_pick_and_place_server,
         # left_preaction_server,

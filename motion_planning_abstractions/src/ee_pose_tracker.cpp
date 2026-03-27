@@ -2,6 +2,8 @@
 #include <memory>
 #include <cmath>
 #include <chrono>
+#include "std_msgs/msg/int16.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
@@ -11,10 +13,10 @@
 using namespace std::chrono_literals;
 
 #include "motion_planning_abstractions/ee_pose_tracker.hpp"
-#include "motion_planning_abstractions/ee_servo.hpp"
-#include "motion_planning_abstractions/bare_bones_moveit.hpp"
 
 PoseTracker::PoseTracker(rclcpp::Node::SharedPtr node){
+    std::cout<<"Starting to setup the pose tracker"<<std::endl;
+
     if(node == nullptr){
         std::cout<<"Node passed is a nullptr"<<std::endl;
         return;
@@ -24,28 +26,50 @@ PoseTracker::PoseTracker(rclcpp::Node::SharedPtr node){
     }
 
     // init variables
+    RCLCPP_INFO(node_->get_logger(),"Creating a servo interface");
     servo_interface_ = std::make_shared<EEServo>(node_);
+    RCLCPP_INFO(node_->get_logger(),"Createing a single_arm_control_interface");
     single_arm_control_interface_ = std::make_shared<BareBonesMoveit>(node_);
+    RCLCPP_INFO(node_->get_logger(),"Created both the interfaces");
+
+    if(servo_interface_==nullptr){
+        RCLCPP_INFO(node_->get_logger(),"Servo interface is null");
+    }
+    if(single_arm_control_interface_==nullptr){
+        RCLCPP_INFO(node_->get_logger(),"Single arm control interface is null");
+    }
 
     output_velocity_ = geometry_msgs::msg::Twist();
     current_state_=State::UN_PREPPED;
     target_pose_ = nullptr;
 
     // get ros parameters
-    node_->declare_parameter<double>("linear_P",1.0);
-    node_->declare_parameter<double>("linear_D",0.0);
-    node_->declare_parameter<double>("angular_P",1.0);
-    node_->declare_parameter<double>("angular_D",0.0);
+    if(!node->has_parameter("linear_P"))
+        node_->declare_parameter<double>("linear_P",1.0);
+    if(!node->has_parameter("linear_D"))
+        node_->declare_parameter<double>("linear_D",0.0);
+    if(!node->has_parameter("angular_P"))
+        node_->declare_parameter<double>("angular_P",1.0);
+    if(!node->has_parameter("angular_D"))
+        node_->declare_parameter<double>("angular_D",0.0);
 
     linear_P_ = node_->get_parameter("linear_P").as_double();
     linear_D_ = node_->get_parameter("linear_D").as_double();
     angular_P_ = node_->get_parameter("angular_P").as_double();
     angular_D_ = node_->get_parameter("angular_D").as_double();
+    
+    RCLCPP_INFO(node_->get_logger(),"linear_P : %.2f",linear_P_);
+    RCLCPP_INFO(node_->get_logger(),"linear_D : %.2f",linear_D_);
+    RCLCPP_INFO(node_->get_logger(),"angular_P : %.2f",angular_P_);
+    RCLCPP_INFO(node_->get_logger(),"angular_D : %.2f",angular_D_);
 
     mex_cb_group_=node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     parallel_cb_group_=node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
     wall_clock_ = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+
+    // publishers
+    current_state_publisher_ = node_->create_publisher<std_msgs::msg::Int16>("~/current_pose_tracker_state",10);
 
     // services
     prepare_tracking_server_=node_->create_service<std_srvs::srv::Trigger>(
@@ -83,6 +107,30 @@ PoseTracker::PoseTracker(rclcpp::Node::SharedPtr node){
         rmw_qos_profile_services_default,
         mex_cb_group_
     );
+
+    RCLCPP_INFO(node_->get_logger(),"All services are initialized, creating timers");
+
+    current_state_publisher_timer_ = node_->create_wall_timer(
+        50ms,
+        [this](){
+            auto msg = std_msgs::msg::Int16();
+            if(current_state_publisher_ != nullptr){
+                msg.data = static_cast<int>(current_state_);
+                current_state_publisher_->publish(msg);
+            }
+        },
+        parallel_cb_group_
+    );
+    RCLCPP_INFO(node_->get_logger(),"All timers initialized, pose tracker setup done");
+
+    control_robot_timer_ = node_->create_wall_timer(
+        100ms,
+        [this](){
+            control_robot_timer_cb_();
+        },
+        parallel_cb_group_
+    );
+
 }
 
 bool PoseTracker::prepare_tracker_(){
@@ -100,7 +148,7 @@ bool PoseTracker::prepare_tracker_(){
     }
     if(current_state_==State::PREPPED){
         RCLCPP_INFO(node_->get_logger(),"Already prepped");
-        return true;
+        // return true;
     }
     if(current_state_==State::TRACKING){
         RCLCPP_INFO(node_->get_logger(),"Already Tracking, dangerous to stop, stop tracking first");
@@ -133,7 +181,7 @@ bool PoseTracker::unprepare_tracker_(){
     }
     if(current_state_==State::UN_PREPPED){
         RCLCPP_INFO(node_->get_logger(),"Already un prepped");
-        return true;
+        // return true;
     }
     if(current_state_==State::TRACKING){
         RCLCPP_INFO(node_->get_logger(),"Already Tracking, dangerous to stop, stop tracking first");
@@ -152,16 +200,16 @@ bool PoseTracker::unprepare_tracker_(){
 }
 
 bool PoseTracker::start_tracking_(){
-    if(target_pose_==nullptr){
-        RCLCPP_ERROR(node_->get_logger(),"No target pose set, not gonna start tracking");
-        return false;
-    }
     if(current_state_==State::TRACKING){
         RCLCPP_INFO(node_->get_logger(),"Already tracking");
         return true;
     }
     if(current_state_==State::UN_PREPPED){
         RCLCPP_ERROR(node_->get_logger(),"The State is un prepared, prepare tracker first");
+        return false;
+    }
+    if(target_pose_==nullptr){
+        RCLCPP_ERROR(node_->get_logger(),"No target pose set, not gonna start tracking");
         return false;
     }
     current_state_=State::TRACKING;
@@ -181,9 +229,9 @@ bool PoseTracker::stop_tracking_(){
     return true;
 }
 
-void PoseTracker::set_target_pose_(const geometry_msgs::msg::Pose& target_pose){
+void PoseTracker::set_target_pose_( geometry_msgs::msg::Pose target_pose){
     if(target_pose_==nullptr){
-        std::make_shared<geometry_msgs::msg::Pose>(target_pose);
+        target_pose_ = std::make_shared<geometry_msgs::msg::Pose>(target_pose);
     }
     else{
         *target_pose_ = target_pose;
@@ -215,7 +263,7 @@ void PoseTracker::control_robot_timer_cb_(){
     }
     if(current_state_==State::TRACKING){
         // compute a velocity and publish
-        if(target_pose_==nullptr){
+        if(target_pose_==nullptr){ // if the state machine is working right, this case never happens
             current_vel_setpoint.twist = geometry_msgs::msg::Twist();
         }
         else{
@@ -233,29 +281,52 @@ void PoseTracker::control_robot_timer_cb_(){
                 get_orientation(current_pose),
                 get_orientation(target_pose_)
             );
-            current_vel_setpoint.twist.linear.x = linear_vel.x();
-            current_vel_setpoint.twist.linear.y = linear_vel.y();
-            current_vel_setpoint.twist.linear.z = linear_vel.z();
-            current_vel_setpoint.twist.angular.x = angular_vel.x();
-            current_vel_setpoint.twist.angular.y = angular_vel.y();
-            current_vel_setpoint.twist.angular.z = angular_vel.z();
+            RCLCPP_INFO(node_->get_logger(),"Linear error : %.2f,%.2f,%.2f",linear_vel[0],linear_vel[1],linear_vel[2]);
+            RCLCPP_INFO(node_->get_logger(),"Angular error : %.2f,%.2f,%.2f",angular_vel[0],angular_vel[1],angular_vel[2]);
+            RCLCPP_INFO(node_->get_logger(),"Current pose : {%.2f,%.2f,%.2f},{%.2f,%.2f,%.2f,%.2f}",
+                current_pose->position.x,
+                current_pose->position.y,
+                current_pose->position.z,
+                current_pose->orientation.x,
+                current_pose->orientation.y,
+                current_pose->orientation.z,
+                current_pose->orientation.w
+            );
+            RCLCPP_INFO(node_->get_logger(),"Target pose : {%.2f,%.2f,%.2f},{%.2f,%.2f,%.2f,%.2f}",
+                target_pose_->position.x,
+                target_pose_->position.y,
+                target_pose_->position.z,
+                target_pose_->orientation.x,
+                target_pose_->orientation.y,
+                target_pose_->orientation.z,
+                target_pose_->orientation.w
+            );
+
+            current_vel_setpoint.header.frame_id = "world";
+            current_vel_setpoint.twist.linear.x = linear_vel[0];
+            current_vel_setpoint.twist.linear.y = linear_vel[1];
+            current_vel_setpoint.twist.linear.z = linear_vel[2];
+            current_vel_setpoint.twist.angular.x = angular_vel[0];
+            current_vel_setpoint.twist.angular.y = angular_vel[1];
+            current_vel_setpoint.twist.angular.z = angular_vel[2];
         }
     }
+    
     servo_interface_->set_vel_setpoint_(current_vel_setpoint);
 }
 
 Eigen::Vector3d PoseTracker::get_linear_error(
-    const Eigen::Vector3d& current_position,
-    const Eigen::Vector3d& target_position
+    Eigen::Vector3d current_position,
+    Eigen::Vector3d target_position
 ){
     return target_position-current_position;
 }
 
 Eigen::Vector3d PoseTracker::get_angular_error( 
-    const Eigen::Quaterniond& current_orientation,
-    const Eigen::Quaterniond& target_orientation
+    Eigen::Quaterniond current_orientation,
+    Eigen::Quaterniond target_orientation
 ){
     auto error_q = target_orientation*current_orientation.inverse();
     auto error_angle_axis = Eigen::AngleAxisd(error_q);
-    return Eigen::Vector3d{error_angle_axis.angle()*error_angle_axis.axis()};
+    return error_angle_axis.angle() * error_angle_axis.axis();
 }

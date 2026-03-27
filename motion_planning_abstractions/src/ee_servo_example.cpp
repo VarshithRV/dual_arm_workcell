@@ -32,7 +32,7 @@ int main(int argc, const char** argv){
                         auto vel = geometry_msgs::msg::TwistStamped();
                         vel.header.frame_id="world";
                         vel.header.stamp = node->get_clock()->now();
-                        vel.twist.linear.x = 0.1;
+                        vel.twist.linear.z = 0.05;
                         return vel;
                     }()
                 );

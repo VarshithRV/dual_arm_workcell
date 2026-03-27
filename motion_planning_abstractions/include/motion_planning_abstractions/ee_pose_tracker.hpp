@@ -4,6 +4,7 @@
 #include <cmath>
 #include "rclcpp/rclcpp.hpp"
 #include "std_srvs/srv/trigger.hpp"
+#include "std_msgs/msg/int16.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
@@ -33,7 +34,7 @@ class PoseTracker{
 
         bool stop_tracking_();
 
-        void set_target_pose_(const geometry_msgs::msg::Pose& target_pose);
+        void set_target_pose_(const geometry_msgs::msg::Pose target_pose);
 
         void clear_target_pose_();
 
@@ -63,18 +64,22 @@ class PoseTracker{
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr start_tracking_server_;
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr stop_tracking_server_;
 
+        // publisher
+        rclcpp::Publisher<std_msgs::msg::Int16>::SharedPtr current_state_publisher_;
+
         // callback group
         rclcpp::CallbackGroup::SharedPtr mex_cb_group_;
         rclcpp::CallbackGroup::SharedPtr parallel_cb_group_;
 
         // Timer for velocity publication
         rclcpp::TimerBase::SharedPtr control_robot_timer_;
+        rclcpp::TimerBase::SharedPtr current_state_publisher_timer_;
 
         // private functions
         void control_robot_timer_cb_();
 
-        Eigen::Vector3d get_linear_error(const Eigen::Vector3d& current_position, const Eigen::Vector3d& target_position);
-        Eigen::Vector3d get_angular_error(const Eigen::Quaterniond& current_orientation, const Eigen::Quaterniond& target_orientation);
+        Eigen::Vector3d get_linear_error( Eigen::Vector3d current_position,  Eigen::Vector3d target_position);
+        Eigen::Vector3d get_angular_error( Eigen::Quaterniond current_orientation,  Eigen::Quaterniond target_orientation);
 
 
 };

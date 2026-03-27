@@ -59,10 +59,14 @@ EEServo::EEServo(rclcpp::Node::SharedPtr node){
     mex_callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
     // declare and get the ros parameters
-    node->declare_parameter<std::string>("servo_node_ns");
-    node->declare_parameter<std::string>("joint_traj_controller");
-    node->declare_parameter<std::string>("joint_vel_controller");
-    node->declare_parameter<double>("alpha",0.8);
+    if(!node->has_parameter("servo_node_ns"))
+        node->declare_parameter<std::string>("servo_node_ns");
+    if(!node->has_parameter("joint_traj_controller"))
+        node->declare_parameter<std::string>("joint_traj_controller");
+    if(!node->has_parameter("joint_vel_controller"))
+        node->declare_parameter<std::string>("joint_vel_controller");
+    if(!node->has_parameter("alpha"))
+        node->declare_parameter<double>("alpha",0.8);
 
     servo_node_ns_ = node_->get_parameter("servo_node_ns").as_string();
     joint_traj_controller_ = node_->get_parameter("joint_traj_controller").as_string();
@@ -76,7 +80,7 @@ EEServo::EEServo(rclcpp::Node::SharedPtr node){
 
     // init publishers
     auto qos_profile = rclcpp::QoS(10);
-    state_publisher_ = node_->create_publisher<std_msgs::msg::Int16>("~/current_state",qos_profile);
+    state_publisher_ = node_->create_publisher<std_msgs::msg::Int16>("~/current_servo_state",qos_profile);
 
     velocity_publisher_ = node_->create_publisher<geometry_msgs::msg::TwistStamped>(servo_node_ns_ + "/delta_twist_cmds",qos_profile);
 
@@ -167,12 +171,12 @@ void EEServo::iir_filter_(geometry_msgs::msg::TwistStamped input, geometry_msgs:
     auto angular_x = (1-alpha_)*input.twist.angular.x + alpha_*output.twist.angular.x;
     auto angular_y = (1-alpha_)*input.twist.angular.y + alpha_*output.twist.angular.y;
     auto angular_z = (1-alpha_)*input.twist.angular.z + alpha_*output.twist.angular.z;
-    output.twist.linear.x = linear_x<1e-6?0.0:linear_x;
-    output.twist.linear.y = linear_y<1e-6?0.0:linear_y;
-    output.twist.linear.z = linear_z<1e-6?0.0:linear_z;
-    output.twist.angular.x = angular_x<1e-6?0.0:angular_x;
-    output.twist.angular.y = angular_y<1e-6?0.0:angular_y;
-    output.twist.angular.z = angular_z<1e-6?0.0:angular_z;
+    output.twist.linear.x = std::abs(linear_x)<1e-6?0.0:linear_x;
+    output.twist.linear.y = std::abs(linear_y)<1e-6?0.0:linear_y;
+    output.twist.linear.z = std::abs(linear_z)<1e-6?0.0:linear_z;
+    output.twist.angular.x = std::abs(angular_x)<1e-6?0.0:angular_x;
+    output.twist.angular.y = std::abs(angular_y)<1e-6?0.0:angular_y;
+    output.twist.angular.z = std::abs(angular_z)<1e-6?0.0:angular_z;
 }
 
 

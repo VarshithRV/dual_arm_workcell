@@ -30,11 +30,16 @@ BareBonesMoveit::BareBonesMoveit(rclcpp::Node::SharedPtr node)
 {   
     node_ = node;
     
-    node_->declare_parameter<std::string>("planning_group", "right_ur16e");
-    node_->declare_parameter<std::string>("endeffector_link", "right_tool0");
-    node_->declare_parameter<std::string>("tscubic_gen_traj_ns", "/right_task_space_cubic_polynomial_trajectory_server/generate_trajectory");
-    node_->declare_parameter<std::string>("tscubic_exec_traj_ns", "/right_task_space_cubic_polynomial_trajectory_server/execute_trajectory");
-    node_->declare_parameter<std::string>("set_io_ns","/right_io_and_status_controller/set_io");
+    if(!node_->has_parameter("planning_group"))
+        node_->declare_parameter<std::string>("planning_group", "right_ur16e");
+    if(!node_->has_parameter("endeffector_link"))
+        node_->declare_parameter<std::string>("endeffector_link", "right_tool0");
+    if(!node_->has_parameter("tscubic_gen_traj_ns"))
+        node_->declare_parameter<std::string>("tscubic_gen_traj_ns", "/right_task_space_cubic_polynomial_trajectory_server/generate_trajectory");
+    if(!node_->has_parameter("tscubic_exec_traj_ns"))
+        node_->declare_parameter<std::string>("tscubic_exec_traj_ns", "/right_task_space_cubic_polynomial_trajectory_server/execute_trajectory");
+    if(!node_->has_parameter("set_io_ns"))
+        node_->declare_parameter<std::string>("set_io_ns","/right_io_and_status_controller/set_io");
 
     planning_group_ = node_->get_parameter("planning_group").as_string();
     endeffector_link_ = node_->get_parameter("endeffector_link").as_string();
@@ -183,11 +188,13 @@ std_srvs::srv::Trigger::Response::SharedPtr BareBonesMoveit::block_till_response
 
 // easy function to get the current pose of the end effector
 geometry_msgs::msg::Pose::SharedPtr BareBonesMoveit::get_current_ee_pose(){
+    move_group_interface_->setStartStateToCurrentState();
     return std::make_shared<geometry_msgs::msg::Pose>(move_group_interface_->getCurrentPose().pose);
 }
 
 // ease function to get the current joint states of robot
 std::vector<double> BareBonesMoveit::get_current_joint_state(){
+    move_group_interface_->setStartStateToCurrentState();
     return move_group_interface_->getCurrentJointValues();
 }
 

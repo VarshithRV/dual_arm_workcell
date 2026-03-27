@@ -95,7 +95,6 @@ install(
 )
 ament_export_targets(export_bare_bones_moveit HAS_LIBRARY_TARGET)
 
-
 add_library(ee_servo SHARED
   src/ee_servo.cpp
 )
@@ -117,8 +116,41 @@ install(
 )
 ament_export_targets(export_ee_servo HAS_LIBRARY_TARGET)
 
+add_library(ee_pose_tracker SHARED
+  src/ee_pose_tracker.cpp
+)
+target_include_directories(ee_pose_tracker
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(ee_pose_tracker ee_servo bare_bones_moveit)
+ament_target_dependencies(ee_pose_tracker
+  ${THIS_PACKAGE_INCLUDE_DEPENDS}
+)
+install(
+  TARGETS ee_pose_tracker
+  EXPORT export_ee_pose_tracker
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
+)
+ament_export_targets(export_ee_pose_tracker HAS_LIBRARY_TARGET)
+
 ament_export_include_directories(include)
 ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
+
+add_executable(ee_pose_tracker_example src/ee_pose_tracker_example.cpp)
+ament_target_dependencies(ee_pose_tracker_example ${THIS_PACKAGE_INCLUDE_DEPENDS})
+target_link_libraries(ee_pose_tracker_example ee_pose_tracker)
+target_include_directories(ee_pose_tracker_example PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+install(TARGETS
+ee_pose_tracker_example
+DESTINATION lib/${PROJECT_NAME}
+)
 
 add_executable(bare_bones_moveit_example src/bare_bones_moveit_example.cpp)
 ament_target_dependencies(bare_bones_moveit_example ${THIS_PACKAGE_INCLUDE_DEPENDS})
