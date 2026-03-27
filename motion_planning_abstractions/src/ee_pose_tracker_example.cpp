@@ -38,29 +38,27 @@ int main(int argc, char ** argv){
             std_srvs::srv::Trigger::Request::SharedPtr,
             std_srvs::srv::Trigger::Response::SharedPtr res
         ){
-            // pose_tracker_interface->clear_target_pose_();
-            // pose_tracker_interface->prepare_tracker_();
-            // pose_tracker_interface->set_target_pose_(*(single_arm_control_interface->get_current_ee_pose()));
-            // pose_tracker_interface->start_tracking_();
+            std::cout<<"clearing target"<<std::endl;
+            pose_tracker_interface->clear_target_pose_();
+            std::cout<<"preparing tracker"<<std::endl;
+            pose_tracker_interface->prepare_tracker_();
+            std::cout<<"setting target pose"<<std::endl;
+            pose_tracker_interface->set_target_pose_(*(single_arm_control_interface->get_current_ee_pose()));
+            std::cout<<"starting to track"<<std::endl;
+            pose_tracker_interface->start_tracking_();
             pose_tracker_interface->set_target_pose_(
                 [node,single_arm_control_interface](){
                     auto current_pose = single_arm_control_interface->get_current_ee_pose();
-                    current_pose->position.x  += 0.05;
-                    RCLCPP_INFO(node->get_logger(),"Target_pose : {%.2f,%.2f,%.2f},{%.2f,%.2f,%.2f,%.2f}",
-                        current_pose->position.x,
-                        current_pose->position.y,
-                        current_pose->position.z,
-                        current_pose->orientation.x,
-                        current_pose->orientation.y,
-                        current_pose->orientation.z,
-                        current_pose->orientation.w
-                    );
+                    current_pose->position.x  += 0.5;
                     return *current_pose;
                 }()
             );
-            // std::this_thread::sleep_for(3s);
-            // pose_tracker_interface->stop_tracking_();
-            // pose_tracker_interface->unprepare_tracker_();
+            std::this_thread::sleep_for(10s);
+            std::cout<<"stopping tracking"<<std::endl;
+            pose_tracker_interface->stop_tracking_();
+            std::cout<<"unprepare tracker"<<std::endl;
+            pose_tracker_interface->unprepare_tracker_();
+            std::cout<<"done"<<std::endl;
         },
         rmw_qos_profile_services_default,
         callback_group

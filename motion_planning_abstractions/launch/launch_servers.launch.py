@@ -294,6 +294,7 @@ def launch_setup(context, *args, **kwargs):
                 "linear_D":0.0,
                 "angular_P":1.0,
                 "angular_D":0.0,
+                "max_velocity":1.0,
             }
         ]
     )

@@ -50,6 +50,7 @@ class PoseTracker{
         double linear_D_ = 1.0;
         double angular_P_ = 1.0;
         double angular_D_ = 1.0;
+        double max_velocity_ = 1.0;
 
         State current_state_=State::UN_PREPPED;
 
@@ -77,9 +78,5 @@ class PoseTracker{
 
         // private functions
         void control_robot_timer_cb_();
-
-        Eigen::Vector3d get_linear_error( Eigen::Vector3d current_position,  Eigen::Vector3d target_position);
-        Eigen::Vector3d get_angular_error( Eigen::Quaterniond current_orientation,  Eigen::Quaterniond target_orientation);
-
 
 };

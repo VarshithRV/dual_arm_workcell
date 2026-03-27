@@ -52,11 +52,14 @@ PoseTracker::PoseTracker(rclcpp::Node::SharedPtr node){
         node_->declare_parameter<double>("angular_P",1.0);
     if(!node->has_parameter("angular_D"))
         node_->declare_parameter<double>("angular_D",0.0);
+    if(!node->has_parameter("max_velocity"))
+        node_->declare_parameter("max_velocity",1.0);
 
     linear_P_ = node_->get_parameter("linear_P").as_double();
     linear_D_ = node_->get_parameter("linear_D").as_double();
     angular_P_ = node_->get_parameter("angular_P").as_double();
     angular_D_ = node_->get_parameter("angular_D").as_double();
+    max_velocity_ = node_->get_parameter("max_velocity").as_double();
     
     RCLCPP_INFO(node_->get_logger(),"linear_P : %.2f",linear_P_);
     RCLCPP_INFO(node_->get_logger(),"linear_D : %.2f",linear_D_);
@@ -267,45 +270,45 @@ void PoseTracker::control_robot_timer_cb_(){
             current_vel_setpoint.twist = geometry_msgs::msg::Twist();
         }
         else{
-            // only P for now
             auto current_pose = single_arm_control_interface_->get_current_ee_pose();
-            auto linear_vel = linear_P_*get_linear_error(
-                Eigen::Vector3d{current_pose->position.x,current_pose->position.y,current_pose->position.z},
-                Eigen::Vector3d{target_pose_->position.x,target_pose_->position.y,target_pose_->position.z}
-            );
-            auto get_orientation = [this](std::shared_ptr<geometry_msgs::msg::Pose>pose){
-                    return Eigen::Quaterniond{pose->orientation.w,pose->orientation.x,
-                    pose->orientation.y,pose->orientation.z};
-            };
-            auto angular_vel = angular_P_*get_angular_error(
-                get_orientation(current_pose),
-                get_orientation(target_pose_)
-            );
-            RCLCPP_INFO(node_->get_logger(),"Linear error : %.2f,%.2f,%.2f",linear_vel[0],linear_vel[1],linear_vel[2]);
-            RCLCPP_INFO(node_->get_logger(),"Angular error : %.2f,%.2f,%.2f",angular_vel[0],angular_vel[1],angular_vel[2]);
-            RCLCPP_INFO(node_->get_logger(),"Current pose : {%.2f,%.2f,%.2f},{%.2f,%.2f,%.2f,%.2f}",
+            Eigen::Vector3d current_position{
                 current_pose->position.x,
                 current_pose->position.y,
-                current_pose->position.z,
-                current_pose->orientation.x,
-                current_pose->orientation.y,
-                current_pose->orientation.z,
-                current_pose->orientation.w
-            );
-            RCLCPP_INFO(node_->get_logger(),"Target pose : {%.2f,%.2f,%.2f},{%.2f,%.2f,%.2f,%.2f}",
+                current_pose->position.z
+            };
+            Eigen::Vector3d target_position{
                 target_pose_->position.x,
                 target_pose_->position.y,
-                target_pose_->position.z,
+                target_pose_->position.z
+            };
+            auto linear_error = target_position-current_position;
+            auto linear_vel = linear_P_ * linear_error;
+            // cap velocity
+            Eigen::Vector3d capped_linear_vel;
+            if(linear_vel.norm()>max_velocity_){
+                capped_linear_vel = linear_vel * max_velocity_/linear_vel.norm();
+            }
+            
+            Eigen::Quaterniond current_orientation{
+                current_pose->orientation.w,
+                current_pose->orientation.x,
+                current_pose->orientation.y,
+                current_pose->orientation.z
+            };
+            Eigen::Quaterniond target_orientation{
+                target_pose_->orientation.w,
                 target_pose_->orientation.x,
                 target_pose_->orientation.y,
-                target_pose_->orientation.z,
-                target_pose_->orientation.w
-            );
+                target_pose_->orientation.z
+            };
+            current_orientation.normalize();
+            target_orientation.normalize();
+            auto error_orientation = Eigen::AngleAxisd(target_orientation * current_orientation.inverse());
+            auto angular_vel = angular_P_ * error_orientation.angle() * error_orientation.axis();
 
-            current_vel_setpoint.header.frame_id = "world";
-            current_vel_setpoint.twist.linear.x = linear_vel[0];
-            current_vel_setpoint.twist.linear.y = linear_vel[1];
-            current_vel_setpoint.twist.linear.z = linear_vel[2];
+            current_vel_setpoint.twist.linear.x = capped_linear_vel[0];
+            current_vel_setpoint.twist.linear.y = capped_linear_vel[1];
+            current_vel_setpoint.twist.linear.z = capped_linear_vel[2];
             current_vel_setpoint.twist.angular.x = angular_vel[0];
             current_vel_setpoint.twist.angular.y = angular_vel[1];
             current_vel_setpoint.twist.angular.z = angular_vel[2];
@@ -313,20 +316,4 @@ void PoseTracker::control_robot_timer_cb_(){
     }
     
     servo_interface_->set_vel_setpoint_(current_vel_setpoint);
-}
-
-Eigen::Vector3d PoseTracker::get_linear_error(
-    Eigen::Vector3d current_position,
-    Eigen::Vector3d target_position
-){
-    return target_position-current_position;
-}
-
-Eigen::Vector3d PoseTracker::get_angular_error( 
-    Eigen::Quaterniond current_orientation,
-    Eigen::Quaterniond target_orientation
-){
-    auto error_q = target_orientation*current_orientation.inverse();
-    auto error_angle_axis = Eigen::AngleAxisd(error_q);
-    return error_angle_axis.angle() * error_angle_axis.axis();
 }
