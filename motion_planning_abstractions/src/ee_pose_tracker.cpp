@@ -214,10 +214,9 @@ void PoseTracker::control_robot_timer_cb_(){
         servo_interface_->set_vel_setpoint_(geometry_msgs::msg::TwistStamped());
     }
     if(current_state_==State::TRACKING){
-        // compute a velocity and publish
         if(target_pose_==nullptr)
-            return;
-        
+        return;
+        // compute a velocity and publish
     }
 }
 
