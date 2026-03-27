@@ -211,13 +211,37 @@ void PoseTracker::control_robot_timer_cb_(){
         return;
     }
     if(current_state_==State::PREPPED){
-        servo_interface_->set_vel_setpoint_(geometry_msgs::msg::TwistStamped());
+        current_vel_setpoint.twist = geometry_msgs::msg::Twist();
     }
     if(current_state_==State::TRACKING){
-        if(target_pose_==nullptr)
-        return;
         // compute a velocity and publish
+        if(target_pose_==nullptr){
+            current_vel_setpoint.twist = geometry_msgs::msg::Twist();
+        }
+        else{
+            // only P for now
+            auto current_pose = single_arm_control_interface_->get_current_ee_pose();
+            auto linear_vel = linear_P_*get_linear_error(
+                Eigen::Vector3d{current_pose->position.x,current_pose->position.y,current_pose->position.z},
+                Eigen::Vector3d{target_pose_->position.x,target_pose_->position.y,target_pose_->position.z}
+            );
+            auto get_orientation = [this](std::shared_ptr<geometry_msgs::msg::Pose>pose){
+                    return Eigen::Quaterniond{pose->orientation.w,pose->orientation.x,
+                    pose->orientation.y,pose->orientation.z};
+            };
+            auto angular_vel = angular_P_*get_angular_error(
+                get_orientation(current_pose),
+                get_orientation(target_pose_)
+            );
+            current_vel_setpoint.twist.linear.x = linear_vel.x();
+            current_vel_setpoint.twist.linear.y = linear_vel.y();
+            current_vel_setpoint.twist.linear.z = linear_vel.z();
+            current_vel_setpoint.twist.angular.x = angular_vel.x();
+            current_vel_setpoint.twist.angular.y = angular_vel.y();
+            current_vel_setpoint.twist.angular.z = angular_vel.z();
+        }
     }
+    servo_interface_->set_vel_setpoint_(current_vel_setpoint);
 }
 
 Eigen::Vector3d PoseTracker::get_linear_error(
