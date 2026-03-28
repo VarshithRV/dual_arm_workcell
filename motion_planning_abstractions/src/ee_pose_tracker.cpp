@@ -284,7 +284,7 @@ void PoseTracker::control_robot_timer_cb_(){
             auto linear_error = target_position-current_position;
             auto linear_vel = linear_P_ * linear_error;
             // cap velocity
-            Eigen::Vector3d capped_linear_vel;
+            Eigen::Vector3d capped_linear_vel=linear_vel;
             if(linear_vel.norm()>max_velocity_){
                 capped_linear_vel = linear_vel * max_velocity_/linear_vel.norm();
             }

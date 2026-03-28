@@ -19,6 +19,7 @@ int main(int argc, char ** argv){
     auto pose_tracker_interface = std::make_shared<PoseTracker>(node);
 
     auto callback_group = node->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+    auto clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
 
     if(node==nullptr){
         std::cout<<"Bad Node initialization"<<std::endl;
@@ -32,9 +33,15 @@ int main(int argc, char ** argv){
 
     RCLCPP_INFO(node->get_logger(),"Created the pose tracker interface and the single arm control interface and the callback group");
 
+    auto get_waypoint = [node,single_arm_control_interface](double t){
+            auto current_pose = single_arm_control_interface->get_current_ee_pose();
+            current_pose->position.x += 0.4*sin(0.5*t);
+            return *current_pose;
+    };
+
     auto execute_service = node->create_service<std_srvs::srv::Trigger>(
         "~/execute",
-        [node,single_arm_control_interface,pose_tracker_interface](
+        [node,single_arm_control_interface,pose_tracker_interface,clock,get_waypoint](
             std_srvs::srv::Trigger::Request::SharedPtr,
             std_srvs::srv::Trigger::Response::SharedPtr res
         ){
@@ -46,14 +53,12 @@ int main(int argc, char ** argv){
             pose_tracker_interface->set_target_pose_(*(single_arm_control_interface->get_current_ee_pose()));
             std::cout<<"starting to track"<<std::endl;
             pose_tracker_interface->start_tracking_();
-            pose_tracker_interface->set_target_pose_(
-                [node,single_arm_control_interface](){
-                    auto current_pose = single_arm_control_interface->get_current_ee_pose();
-                    current_pose->position.x  += 0.5;
-                    return *current_pose;
-                }()
-            );
-            std::this_thread::sleep_for(10s);
+            std::chrono::duration current_time = std::chrono::duration<double,std::ratio<1>>(clock->now().seconds());
+            auto duration = std::chrono::duration<double,std::ratio<1>>(0.0);
+            while(rclcpp::ok() && duration<30s){
+                duration = std::chrono::duration<double,std::ratio<1>>(clock->now().seconds())-current_time;
+                pose_tracker_interface->set_target_pose_(get_waypoint(duration.count()));
+            }
             std::cout<<"stopping tracking"<<std::endl;
             pose_tracker_interface->stop_tracking_();
             std::cout<<"unprepare tracker"<<std::endl;
