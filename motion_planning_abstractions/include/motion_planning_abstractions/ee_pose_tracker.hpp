@@ -8,6 +8,7 @@
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
+#include "motion_planning_abstractions_msgs/srv/set_target_pose.hpp"
 
 using namespace std::chrono_literals;
 
@@ -64,9 +65,12 @@ class PoseTracker{
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr unprepare_tracking_server_;
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr start_tracking_server_;
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr stop_tracking_server_;
+        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr clear_target_pose_server_;
+        rclcpp::Service<motion_planning_abstractions_msgs::srv::SetTargetPose>::SharedPtr set_target_pose_server_;
 
         // publisher
         rclcpp::Publisher<std_msgs::msg::Int16>::SharedPtr current_state_publisher_;
+        rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr target_pose_publisher_;
 
         // callback group
         rclcpp::CallbackGroup::SharedPtr mex_cb_group_;

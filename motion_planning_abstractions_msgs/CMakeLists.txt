@@ -15,6 +15,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/Pick.srv"
   "srv/GenerateTrajectory.srv"
   "srv/ExecuteTrajectory.srv"
+  "srv/SetTargetPose.srv"
   DEPENDENCIES geometry_msgs trajectory_msgs
 )
 

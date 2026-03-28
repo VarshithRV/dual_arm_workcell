@@ -5,8 +5,10 @@
 #include "std_msgs/msg/int16.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include "geometry_msgs/msg/pose.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
+#include "motion_planning_abstractions_msgs/srv/set_target_pose.hpp"
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 
@@ -73,6 +75,7 @@ PoseTracker::PoseTracker(rclcpp::Node::SharedPtr node){
 
     // publishers
     current_state_publisher_ = node_->create_publisher<std_msgs::msg::Int16>("~/current_pose_tracker_state",10);
+    target_pose_publisher_ = node_->create_publisher<geometry_msgs::msg::PoseStamped>("~/target_pose",10);
 
     // services
     prepare_tracking_server_=node_->create_service<std_srvs::srv::Trigger>(
@@ -110,6 +113,27 @@ PoseTracker::PoseTracker(rclcpp::Node::SharedPtr node){
         rmw_qos_profile_services_default,
         mex_cb_group_
     );
+    clear_target_pose_server_ = node_->create_service<std_srvs::srv::Trigger>(
+        "~/clear_target_pose",
+        [this](std_srvs::srv::Trigger::Request::SharedPtr,std_srvs::srv::Trigger::Response::SharedPtr res){
+            clear_target_pose_();
+            res->success = true;
+        },
+        rmw_qos_profile_services_default,
+        mex_cb_group_
+    );
+    set_target_pose_server_ = node_->create_service<motion_planning_abstractions_msgs::srv::SetTargetPose>(
+        "~/set_target_pose",
+        [this](
+            motion_planning_abstractions_msgs::srv::SetTargetPose::Request::SharedPtr req, 
+            motion_planning_abstractions_msgs::srv::SetTargetPose::Response::SharedPtr res
+        ){
+            set_target_pose_(req->target_pose);
+            res->success = true;
+        },
+        rmw_qos_profile_services_default,
+        mex_cb_group_
+    );
 
     RCLCPP_INFO(node_->get_logger(),"All services are initialized, creating timers");
 
@@ -117,9 +141,16 @@ PoseTracker::PoseTracker(rclcpp::Node::SharedPtr node){
         50ms,
         [this](){
             auto msg = std_msgs::msg::Int16();
+            auto pose = geometry_msgs::msg::PoseStamped();
+            pose.header.frame_id = "world";
+            pose.header.stamp = wall_clock_->now();
             if(current_state_publisher_ != nullptr){
                 msg.data = static_cast<int>(current_state_);
                 current_state_publisher_->publish(msg);
+            }
+            if(target_pose_!=nullptr){
+                pose.pose = *target_pose_;
+                target_pose_publisher_->publish(pose);
             }
         },
         parallel_cb_group_
