@@ -6,8 +6,6 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
-// #include "motion_planning_abstractions/bare_bones_moveit.hpp"
-// #include "motion_planning_abstractions/ee_servo.hpp"
 #include "motion_planning_abstractions/ee_pose_tracker.hpp"
 
 using namespace std::chrono_literals;

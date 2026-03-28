@@ -562,10 +562,10 @@ def launch_setup(context, *args, **kwargs):
     nodes_to_start = [
         # left_pose_tracking_node,
         # rws_pick_and_place_server,
-        # left_task_space_cubic_polynomial_trajectory_server,
+        left_task_space_cubic_polynomial_trajectory_server,
         # right_task_space_cubic_polynomial_trajectory_server,
         # bare_bones_moveit_node,
-        # ee_servo_example,
+        ee_servo_example,
         ee_pose_tracker_example,
         # dual_arm_control_template_node,
         # suction_pick_and_place_server,
