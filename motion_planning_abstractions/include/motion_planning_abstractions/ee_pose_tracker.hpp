@@ -1,3 +1,5 @@
+#ifndef MOTION_PLANNING_ABSTRACTIONS_POSE_TRACKER_HPP
+#define MOTION_PLANNING_ABSTRACTIONS_POSE_TRACKER_HPP
 #include <functional>
 #include <memory>
 #include <chrono>
@@ -84,3 +86,4 @@ class PoseTracker{
         void control_robot_timer_cb_();
 
 };
+#endif

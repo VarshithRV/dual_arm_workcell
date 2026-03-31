@@ -7,6 +7,8 @@
 // std::string trajectory_controller
 // std::string joint_vel_controller
 // double alpha(range from 0 to 1), bigger alpha means more filtering
+#ifndef MOTION_PLANNING_ABSTRACTIONS_EE_SERVO_HPP
+#define MOTION_PLANNING_ABSTRACTIONS_EE_SERVO_HPP
 
 #include <memory>
 #include <string>
@@ -98,3 +100,4 @@ private:
     rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_;
     rclcpp::CallbackGroup::SharedPtr mex_callback_group_;
 };
+#endif

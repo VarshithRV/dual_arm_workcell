@@ -1,4 +1,6 @@
 // single arm control abstraction header
+#ifndef MOTION_PLANNING_ABSTRACTIONS_BARE_BONES_MOVEIT_HPP
+#define MOTION_PLANNING_ABSTRACTIONS_BARE_BONES_MOVEIT_HPP
 
 #include <memory>
 #include <string>
@@ -124,3 +126,5 @@ private:
     std::string tscubic_exec_traj_ns_;
     std::string set_io_ns_;
 };
+
+#endif
