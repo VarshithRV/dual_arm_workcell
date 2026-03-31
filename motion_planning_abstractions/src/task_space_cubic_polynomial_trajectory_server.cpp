@@ -82,7 +82,7 @@ public:
         node_->declare_parameter<double>("maximum_joint_space_velocity",M_PI); // in rads-1
         node_->declare_parameter<double>("maximum_joint_space_acceleration",M_PI); // in rads-2
         // flag
-        node_->declare_parameter<std::string>("arm_side", "right");
+        node_->declare_parameter<std::string>("joint_prefix", "right_");
         // flag
         node_->declare_parameter<std::string>("joint_trajectory_controller", "right_scaled_joint_trajectory_controller");
         // flag
@@ -96,7 +96,7 @@ public:
         maximum_task_space_acceleration_ = node_->get_parameter("maximum_task_space_acceleration").as_double();
         maximum_joint_space_velocity_ = node_->get_parameter("maximum_joint_space_velocity").as_double();
         maximum_joint_space_acceleration_ = node_->get_parameter("maximum_joint_space_acceleration").as_double();
-        arm_side = node_->get_parameter("arm_side").as_string();
+        arm_side = node_->get_parameter("joint_prefix").as_string();
         joint_trajectory_controller_ = node_->get_parameter("joint_trajectory_controller").as_string();
         endeffector_link_ = node_->get_parameter("endeffector_link").as_string();
 
@@ -885,12 +885,12 @@ public:
         res->trajectory.header.frame_id = "world";
         res->trajectory.header.stamp = node_->get_clock()->now();
         res->trajectory.joint_names = {
-            arm_side + "_shoulder_pan_joint",
-            arm_side + "_shoulder_lift_joint",
-            arm_side + "_elbow_joint",
-            arm_side + "_wrist_1_joint",
-            arm_side + "_wrist_2_joint",
-            arm_side + "_wrist_3_joint"
+            arm_side + "shoulder_pan_joint",
+            arm_side + "shoulder_lift_joint",
+            arm_side + "elbow_joint",
+            arm_side + "wrist_1_joint",
+            arm_side + "wrist_2_joint",
+            arm_side + "wrist_3_joint"
         };
 
         // populate the res->trajectory message here
