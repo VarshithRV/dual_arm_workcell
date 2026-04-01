@@ -29,6 +29,8 @@ class PoseTracker{
 
         PoseTracker(rclcpp::Node::SharedPtr node);
 
+        PoseTracker(rclcpp::Node::SharedPtr node, std::shared_ptr<BareBonesMoveit> single_arm_control_interface);
+
         bool prepare_tracker_();
 
         bool unprepare_tracker_();

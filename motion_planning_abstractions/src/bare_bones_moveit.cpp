@@ -82,7 +82,7 @@ BareBonesMoveit::BareBonesMoveit(rclcpp::Node::SharedPtr node)
         callback_group_
     );
     test_server_ = node_->create_service<std_srvs::srv::Trigger>(
-        "~/test_server",
+        "~/single_arm_control_interface_test_server",
         [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
             res->success = test_server_callback_();
             return;
@@ -301,7 +301,7 @@ bool BareBonesMoveit::test_server_callback_(){
 // TS CUBIC POLYNOMIAL EXECUTION
 bool BareBonesMoveit::execute_waypoints_cubic(std::vector<geometry_msgs::msg::Pose> waypoints, std::vector<double> durations, double average_speed, double waypoint_speed){
     
-    if (is_execute_trajectory_client_ready_ && is_generate_trajectory_client_ready_){
+    if (!(is_execute_trajectory_client_ready_ && is_generate_trajectory_client_ready_)){
         RCLCPP_ERROR(node_->get_logger(),"The cubic polynomial trajectory services are not connected, exiting");
         return false;
     }

@@ -16,6 +16,161 @@ using namespace std::chrono_literals;
 
 #include "motion_planning_abstractions/ee_pose_tracker.hpp"
 
+PoseTracker::PoseTracker(rclcpp::Node::SharedPtr node, std::shared_ptr<BareBonesMoveit> single_arm_control_interface){
+    std::cout<<"Starting to setup the pose tracker"<<std::endl;
+
+    if(node == nullptr){
+        std::cout<<"Node passed is a nullptr"<<std::endl;
+        return;
+    }
+    else{
+        node_=node;
+    }
+    if(single_arm_control_interface == nullptr){
+        std::cout<<"single_arm_control_interface passed is a nullptr"<<std::endl;
+        return;
+    }
+    else{
+        single_arm_control_interface_ = single_arm_control_interface;
+    }
+
+    // init variables
+    RCLCPP_INFO(node_->get_logger(),"Creating a servo interface");
+    servo_interface_ = std::make_shared<EEServo>(node_);
+    RCLCPP_INFO(node_->get_logger(),"Created both the interfaces");
+
+    if(servo_interface_==nullptr){
+        RCLCPP_INFO(node_->get_logger(),"Servo interface is null");
+    }
+    if(single_arm_control_interface_==nullptr){
+        RCLCPP_INFO(node_->get_logger(),"Single arm control interface is null");
+    }
+
+    output_velocity_ = geometry_msgs::msg::Twist();
+    current_state_=State::UN_PREPPED;
+    target_pose_ = nullptr;
+
+    // get ros parameters
+    if(!node->has_parameter("linear_P"))
+        node_->declare_parameter<double>("linear_P",1.0);
+    if(!node->has_parameter("linear_D"))
+        node_->declare_parameter<double>("linear_D",0.0);
+    if(!node->has_parameter("angular_P"))
+        node_->declare_parameter<double>("angular_P",1.0);
+    if(!node->has_parameter("angular_D"))
+        node_->declare_parameter<double>("angular_D",0.0);
+    if(!node->has_parameter("max_velocity"))
+        node_->declare_parameter("max_velocity",1.0);
+
+    linear_P_ = node_->get_parameter("linear_P").as_double();
+    linear_D_ = node_->get_parameter("linear_D").as_double();
+    angular_P_ = node_->get_parameter("angular_P").as_double();
+    angular_D_ = node_->get_parameter("angular_D").as_double();
+    max_velocity_ = node_->get_parameter("max_velocity").as_double();
+    
+    RCLCPP_INFO(node_->get_logger(),"linear_P : %.2f",linear_P_);
+    RCLCPP_INFO(node_->get_logger(),"linear_D : %.2f",linear_D_);
+    RCLCPP_INFO(node_->get_logger(),"angular_P : %.2f",angular_P_);
+    RCLCPP_INFO(node_->get_logger(),"angular_D : %.2f",angular_D_);
+
+    mex_cb_group_=node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    parallel_cb_group_=node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+
+    wall_clock_ = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+
+    // publishers
+    current_state_publisher_ = node_->create_publisher<std_msgs::msg::Int16>("~/current_pose_tracker_state",10);
+    target_pose_publisher_ = node_->create_publisher<geometry_msgs::msg::PoseStamped>("~/target_pose",10);
+
+    // services
+    prepare_tracking_server_=node_->create_service<std_srvs::srv::Trigger>(
+        "~/prepare_tracker",
+        [this](std_srvs::srv::Trigger::Request::SharedPtr, std_srvs::srv::Trigger::Response::SharedPtr res){
+            res->success=prepare_tracker_();
+        },
+        rmw_qos_profile_services_default,
+        mex_cb_group_
+    );
+
+    unprepare_tracking_server_=node_->create_service<std_srvs::srv::Trigger>(
+        "~/unprepare_tracker",
+        [this](std_srvs::srv::Trigger::Request::SharedPtr, std_srvs::srv::Trigger::Response::SharedPtr res){
+            res->success=unprepare_tracker_();
+        },
+        rmw_qos_profile_services_default,
+        mex_cb_group_
+    );
+
+    start_tracking_server_=node_->create_service<std_srvs::srv::Trigger>(
+        "~/start_tracker",
+        [this](std_srvs::srv::Trigger::Request::SharedPtr, std_srvs::srv::Trigger::Response::SharedPtr res){
+            res->success=start_tracking_();
+        },
+        rmw_qos_profile_services_default,
+        mex_cb_group_
+    );
+
+    stop_tracking_server_=node_->create_service<std_srvs::srv::Trigger>(
+        "~/stop_tracker",
+        [this](std_srvs::srv::Trigger::Request::SharedPtr, std_srvs::srv::Trigger::Response::SharedPtr res){
+            res->success=stop_tracking_();
+        },
+        rmw_qos_profile_services_default,
+        mex_cb_group_
+    );
+    clear_target_pose_server_ = node_->create_service<std_srvs::srv::Trigger>(
+        "~/clear_target_pose",
+        [this](std_srvs::srv::Trigger::Request::SharedPtr,std_srvs::srv::Trigger::Response::SharedPtr res){
+            clear_target_pose_();
+            res->success = true;
+        },
+        rmw_qos_profile_services_default,
+        mex_cb_group_
+    );
+    set_target_pose_server_ = node_->create_service<motion_planning_abstractions_msgs::srv::SetTargetPose>(
+        "~/set_target_pose",
+        [this](
+            motion_planning_abstractions_msgs::srv::SetTargetPose::Request::SharedPtr req, 
+            motion_planning_abstractions_msgs::srv::SetTargetPose::Response::SharedPtr res
+        ){
+            set_target_pose_(req->target_pose);
+            res->success = true;
+        },
+        rmw_qos_profile_services_default,
+        mex_cb_group_
+    );
+
+    RCLCPP_INFO(node_->get_logger(),"All services are initialized, creating timers");
+
+    current_state_publisher_timer_ = node_->create_wall_timer(
+        50ms,
+        [this](){
+            auto msg = std_msgs::msg::Int16();
+            auto pose = geometry_msgs::msg::PoseStamped();
+            pose.header.frame_id = "world";
+            pose.header.stamp = wall_clock_->now();
+            if(current_state_publisher_ != nullptr){
+                msg.data = static_cast<int>(current_state_);
+                current_state_publisher_->publish(msg);
+            }
+            if(target_pose_!=nullptr){
+                pose.pose = *target_pose_;
+                target_pose_publisher_->publish(pose);
+            }
+        },
+        parallel_cb_group_
+    );
+    RCLCPP_INFO(node_->get_logger(),"All timers initialized, pose tracker setup done");
+
+    control_robot_timer_ = node_->create_wall_timer(
+        100ms,
+        [this](){
+            control_robot_timer_cb_();
+        },
+        parallel_cb_group_
+    );
+}
+
 PoseTracker::PoseTracker(rclcpp::Node::SharedPtr node){
     std::cout<<"Starting to setup the pose tracker"<<std::endl;
 
