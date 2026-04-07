@@ -782,6 +782,11 @@ public:
         motion_planning_abstractions_msgs::srv::GenerateTrajectory::Request::SharedPtr req, 
         motion_planning_abstractions_msgs::srv::GenerateTrajectory::Response::SharedPtr res
     ){
+        if(req->waypoints.size()==0 or req->durations.size()==0){
+            RCLCPP_INFO(node_->get_logger(),"No waypoints or durations passed, no trajectory generated");
+            return;
+        }
+        
         std::vector<geometry_msgs::msg::Pose> waypoints(req->waypoints);
         std::vector<double> durations(req->durations);
         waypoint_velocity_ = req->waypoint_speed;

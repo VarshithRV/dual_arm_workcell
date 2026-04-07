@@ -17,7 +17,7 @@ int main(int argc, char** argv){
     rclcpp::executors::MultiThreadedExecutor::SharedPtr executor=std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
     executor->add_node(node_);
 
-    auto wp_entry_point = std::make_shared<BareBonesMoveit>(node_);
+    auto wp_entry_point = std::make_shared<DualArmControlInterface>(node_);
     
     auto execute_service_callback = [wp_entry_point,node_](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
         auto LOGGER = node_->get_logger();

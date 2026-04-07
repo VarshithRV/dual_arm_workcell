@@ -23,12 +23,12 @@
 using namespace std::chrono_literals;
 using moveit::planning_interface::MoveGroupInterface;
 
-class BareBonesMoveit{
+class DualArmControlInterface{
 public:
     std::shared_ptr<MoveGroupInterface> left_move_group_interface_;
     std::shared_ptr<MoveGroupInterface> right_move_group_interface_;
     
-    BareBonesMoveit(rclcpp::Node::SharedPtr node)
+    DualArmControlInterface(rclcpp::Node::SharedPtr node)
     {
 
         node_ = node;
@@ -82,7 +82,7 @@ public:
         callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
         // servers
-        print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",std::bind(&BareBonesMoveit::print_state, this,std::placeholders::_1, std::placeholders::_2),rmw_qos_profile_services_default,callback_group_);
+        print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",std::bind(&DualArmControlInterface::print_state, this,std::placeholders::_1, std::placeholders::_2),rmw_qos_profile_services_default,callback_group_);
 
         // service clients
         left_execute_trajectory_client_ = node_->create_client<std_srvs::srv::Trigger>("/left_task_space_cubic_polynomial_trajectory_server/execute_trajectory");
@@ -187,7 +187,7 @@ public:
             else if(side == "right"){
                 auto future = right_generate_trajectory_client_->async_send_request(goal);
                 if(future.wait_for(2s)!=std::future_status::ready){
-                    RCLCPP_ERROR(node_->get_logger(),"Generate left trajectory service call timed out!");
+                    RCLCPP_ERROR(node_->get_logger(),"Generate right trajectory service call timed out!");
                     return nullptr;
                 }
                 gen_response = future.get();    
