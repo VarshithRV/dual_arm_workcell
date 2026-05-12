@@ -562,7 +562,7 @@ def launch_setup(context, *args, **kwargs):
         # right_task_space_cubic_polynomial_trajectory_server,
         # bare_bones_moveit_node,
         ee_servo_example,
-        ee_pose_tracker_example,
+        # ee_pose_tracker_example,
         # dual_arm_control_template_node,
         # suction_pick_and_place_server,
         # left_preaction_server,
