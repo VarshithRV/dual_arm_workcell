@@ -77,7 +77,7 @@ def launch_setup():
         launch_arguments={
             'camera_name': 'left_camera',
             'align_depth.enable': 'true',
-            'serial_no': '_210622060509',
+            'serial_no': '_211122061649',
             'pointcloud.enable': 'false',
             'spatial_filter.enable': 'true',
             'temporal_filter.enable': 'true',
@@ -101,7 +101,7 @@ def launch_setup():
         launch_arguments={
             'camera_name': 'right_camera',
             'align_depth.enable': 'true',
-            'serial_no': '_211122061649',
+            'serial_no': '_135122075246',
             'pointcloud.enable': 'false',
             'spatial_filter.enable': 'true',
             'temporal_filter.enable': 'true',
