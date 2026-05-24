@@ -1,5 +1,6 @@
 // dual arm control client for demos
-
+#ifndef DUAL_ARM_CONTROL_INTERFACE_HPP
+#define DUAL_ARM_CONTROL_INTERFACE_HPP
 #include <memory>
 #include <string>
 #include <chrono>
@@ -554,3 +555,5 @@ private:
     std::vector<double> left_joint_state_target_;
     std::vector<double> right_joint_state_target_;
 };
+
+#endif
