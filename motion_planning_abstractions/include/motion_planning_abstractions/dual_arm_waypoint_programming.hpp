@@ -510,6 +510,10 @@ public:
         }
     }
 
+public:
+    rclcpp::Client<ur_msgs::srv::SetIO>::SharedPtr left_set_io_client_;
+    rclcpp::Client<ur_msgs::srv::SetIO>::SharedPtr right_set_io_client_;
+
 private:
     std::thread thread_;
     
@@ -541,8 +545,6 @@ private:
     rclcpp::Client<motion_planning_abstractions_msgs::srv::GenerateTrajectory>::SharedPtr left_generate_trajectory_client_;
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr right_execute_trajectory_client_;
     rclcpp::Client<motion_planning_abstractions_msgs::srv::GenerateTrajectory>::SharedPtr right_generate_trajectory_client_;
-    rclcpp::Client<ur_msgs::srv::SetIO>::SharedPtr left_set_io_client_;
-    rclcpp::Client<ur_msgs::srv::SetIO>::SharedPtr right_set_io_client_;
 
     // timers
     rclcpp::TimerBase::SharedPtr sample_timer_;

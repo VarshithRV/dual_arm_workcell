@@ -418,7 +418,7 @@ def launch_setup(context, *args, **kwargs):
                 "maximum_task_space_acceleration_" : 3.0,
                 "maximum_joint_space_velocity_" : 3.15,
                 "maximum_joint_space_acceleration_" : 3.14,
-                "joint_prefix" : "left_",
+                "joint_prefix" : "right_",
                 "joint_trajectory_controller_" : "right_scaled_joint_trajectory_controller",
                 "endeffector_link_" : "right_tool0",
             },
