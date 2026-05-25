@@ -1069,7 +1069,7 @@ def generate_launch_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             "right_tool0_z",
-            default_value="0.125",
+            default_value="0.155",
             description="tool z of right robot",
         )
     )
