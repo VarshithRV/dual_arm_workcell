@@ -11,10 +11,10 @@ import math
 
 def launch_setup():
     left_robot_ip = LaunchConfiguration('left_robot_ip')
-    left_translation = [-0.331,0.529,0.006]
+    left_translation = [-0.577,0.529,0.00]
     left_rotation = [0.0,0.0,math.pi/2]
     right_robot_ip = LaunchConfiguration('right_robot_ip')
-    right_translation = [0.587,0.542,0.001]
+    right_translation = [0.577,0.529,0.00]
     right_rotation = [0.0,0.0,math.pi/2]
     use_fake_hardware = LaunchConfiguration('use_fake_hardware')
     use_sim_time = LaunchConfiguration('use_sim_time')
@@ -79,11 +79,11 @@ def launch_setup():
             'align_depth.enable': 'true',
             'serial_no': '_211122061649',
             'pointcloud.enable': 'false',
-            'spatial_filter.enable': 'true',
-            'temporal_filter.enable': 'true',
-            'hole_filling_filter.enable': 'true',
+            'spatial_filter.enable': 'false',
+            'temporal_filter.enable': 'false',
+            'hole_filling_filter.enable': 'false',
             'rgb_camera.color_profile':'640,480,30',
-            'depth_module.color_profile':'640,480,30',
+            'enable_depth':'false',
         }.items(),
         condition=UnlessCondition(use_fake_hardware) and IfCondition(launch_cameras),
     )
@@ -103,9 +103,9 @@ def launch_setup():
             'align_depth.enable': 'true',
             'serial_no': '_135122075246',
             'pointcloud.enable': 'false',
-            'spatial_filter.enable': 'true',
-            'temporal_filter.enable': 'true',
-            'hole_filling_filter.enable': 'true',
+            'spatial_filter.enable': 'false',
+            'temporal_filter.enable': 'false',
+            'hole_filling_filter.enable': 'false',
             'rgb_camera.color_profile':'640,480,30',
             'depth_module.color_profile':'640,480,30',
         }.items(),
@@ -122,9 +122,9 @@ def launch_setup():
         dual_arm_workcell_control_launch,
         dual_arm_workcell_moveit_launch,
         left_camera_launch,
-        right_camera_launch,
+        # right_camera_launch,
         left_camera_calibration_launch,
-        right_camera_calibration_launch,
+        # right_camera_calibration_launch,
     ]
 
 

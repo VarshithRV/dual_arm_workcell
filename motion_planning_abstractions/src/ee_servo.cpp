@@ -135,13 +135,15 @@ EEServo::EEServo(rclcpp::Node::SharedPtr node){
     );
 
     velocity_publisher_timer_ = node_->create_wall_timer(
-        100ms,
+        10ms,
         [this,LOGGER](){
-            if(current_state_==State::NOT_READY || current_state_ ==State::READY){
+            if(current_state_ ==State::READY){
                 current_velocity_setpoint_ = geometry_msgs::msg::TwistStamped();
             }
             filtered_velocity_setpoint_.header.stamp = wall_clock_.now();
-            velocity_publisher_->publish(filtered_velocity_setpoint_);
+            if(current_state_ != State::NOT_READY){
+                velocity_publisher_->publish(filtered_velocity_setpoint_);
+            }
         },
         reentrant_callback_group_
     );
@@ -285,6 +287,7 @@ bool EEServo::stop_servo_(){
     auto LOGGER = node_->get_logger();
     if(current_state_!=State::NOT_READY){
         current_state_ = State::READY;
+        current_velocity_setpoint_ = geometry_msgs::msg::TwistStamped();
         return true;
     }
     return false;

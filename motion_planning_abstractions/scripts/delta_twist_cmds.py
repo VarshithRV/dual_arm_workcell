@@ -3,6 +3,7 @@ import rclpy
 from rclpy.node import Node
 
 from geometry_msgs.msg import TwistStamped
+from std_msgs.msg import Float64MultiArray
 
 
 class ServoTwistPublisher(Node):
@@ -10,15 +11,18 @@ class ServoTwistPublisher(Node):
         super().__init__("servo_twist_publisher")
 
         self.pub = self.create_publisher(
+            # Float64MultiArray,
             TwistStamped,
-            "/left_servo_node_main/delta_twist_cmds",
+            "/right_servo_node_main/delta_twist_cmds",
+            # "/right_forward_velocity_controller/commands",
             10
         )
 
         # publish at 50 Hz (MoveIt Servo typical rate)
-        self.timer = self.create_timer(0.02, self.timer_callback)
+        self.timer = self.create_timer(0.034, self.timer_callback)
 
     def timer_callback(self):
+        
         msg = TwistStamped()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = "world"     # change if needed
@@ -27,13 +31,16 @@ class ServoTwistPublisher(Node):
         # linear velocity
         msg.twist.linear.x = 0.0
         msg.twist.linear.y = 0.0
-        msg.twist.linear.z = 0.01
+        msg.twist.linear.z = 0.1
 
         # angular velocity
         msg.twist.angular.x = 0.0
         msg.twist.angular.y = 0.0
         msg.twist.angular.z = 0.0
         # ----------------------------------
+
+        # msg = Float64MultiArray()
+        # msg.data=[0.0,-0.157,0.0,0.0,0.0,0.0]
 
         self.pub.publish(msg)
 

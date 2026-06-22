@@ -17,7 +17,7 @@ scale:
 system_latency_compensation: 0.04
 
 ## Properties of outgoing commands
-publish_period: 0.034  # 1/Nominal publish rate [seconds]
+publish_period: 0.03344 # 1/Nominal publish rate [seconds]
 low_latency_mode: false  # Set this to true to publish as soon as an incoming Twist command is received (publish_period is ignored)
 
 # What type of topic does your robot driver expect?
@@ -31,6 +31,7 @@ publish_joint_accelerations: false
 
 ## Plugins for smoothing outgoing commands
 smoothing_filter_plugin_name: "online_signal_smoothing::ButterworthFilterPlugin"
+# smoothing_filter_plugin_name: "online_signal_smoothing::AccelerationLimitedPlugin"
 
 # If is_primary_planning_scene_monitor is set to true, the Servo server's PlanningScene advertises the /get_planning_scene service,
 # which other nodes can use as a source for information about the planning environment.
