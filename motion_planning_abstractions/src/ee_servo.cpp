@@ -7,6 +7,12 @@
 // std::string joint_vel_controller
 // double alpha(range from 0 to 1)
 
+// TODO list
+// add the switch mode clients
+// remove stop and start servo client
+// modify the prepare servo call back to do the right things, prepare and unprepare only switches the controller now
+// once the node spawns, it should call the switch mode server to set to twist mode
+
 #include <memory>
 #include <string>
 #include <chrono>
@@ -20,6 +26,7 @@
 #include "std_srvs/srv/trigger.hpp"
 #include "std_msgs/msg/int16.hpp"
 #include "moveit/move_group_interface/move_group_interface.h"
+#include "moveit_msgs/srv/servo_command_type.hpp"
 #include "moveit_msgs/msg/robot_trajectory.hpp"
 #include "motion_planning_abstractions_msgs/srv/generate_trajectory.hpp"
 #include "controller_manager_msgs/srv/switch_controller.hpp"
@@ -85,8 +92,7 @@ EEServo::EEServo(rclcpp::Node::SharedPtr node){
     velocity_publisher_ = node_->create_publisher<geometry_msgs::msg::TwistStamped>(servo_node_ns_ + "/delta_twist_cmds",qos_profile);
 
     // init clients
-    start_servo_client_ = node_->create_client<std_srvs::srv::Trigger>(servo_node_ns_+"/start_servo");
-    stop_servo_client_ = node_->create_client<std_srvs::srv::Trigger>(servo_node_ns_+"/stop_servo");
+    switch_command_type_client_ = node_->create_client<moveit_msgs::srv::ServoCommandType>(servo_node_ns_+"/switch_command_type");
     switch_controller_client_ = node_->create_client<controller_manager_msgs::srv::SwitchController>("/controller_manager/switch_controller");
 
     // init servers
@@ -137,9 +143,6 @@ EEServo::EEServo(rclcpp::Node::SharedPtr node){
     velocity_publisher_timer_ = node_->create_wall_timer(
         10ms,
         [this,LOGGER](){
-            if(current_state_ ==State::READY){
-                current_velocity_setpoint_ = geometry_msgs::msg::TwistStamped();
-            }
             filtered_velocity_setpoint_.header.stamp = wall_clock_.now();
             if(current_state_ != State::NOT_READY){
                 velocity_publisher_->publish(filtered_velocity_setpoint_);
@@ -155,6 +158,19 @@ EEServo::EEServo(rclcpp::Node::SharedPtr node){
         },
         reentrant_callback_group_
     );
+}
+
+void EEServo::initialize_servo_interface_(){
+    auto LOGGER = node_->get_logger();
+    auto switch_command_type_req = std::make_shared<moveit_msgs::srv::ServoCommandType::Request>();
+    switch_command_type_req->command_type = switch_command_type_req->TWIST;
+    auto switch_command_type_future = switch_command_type_client_->async_send_request(switch_command_type_req);
+    if(switch_command_type_future.wait_for(5s)!=std::future_status::ready){
+        RCLCPP_ERROR(LOGGER,"Switch command type client timed out!");
+    }
+    else{
+        RCLCPP_INFO(LOGGER,"Switch command type to twist finished");
+    }
 }
 
 void EEServo::set_vel_setpoint_(geometry_msgs::msg::TwistStamped vel){
@@ -207,19 +223,9 @@ bool EEServo::prepare_servo_(){
     else{
         if(switch_controller_future.get()->ok){
             RCLCPP_INFO(LOGGER,"Switched to %s controller from %s controller",joint_vel_controller_.c_str(),joint_traj_controller_.c_str());
-            auto start_servo_future = start_servo_client_->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
-            if(start_servo_future.wait_for(5s)!=std::future_status::ready){
-                RCLCPP_ERROR(LOGGER,"Start servo service timed out while waiting");
-                return false;
-            }
-            else{
-                auto res = start_servo_future.get();
-                RCLCPP_INFO(LOGGER,"Start servo service completed with %s",res->message.c_str());
-                auto success = res->success;
-                if(success)
-                    current_state_ = State::READY;
-                return success;
-            }
+            current_velocity_setpoint_.twist = geometry_msgs::msg::Twist();
+            current_state_ = State::READY;
+            return true;
         }
         else{
             RCLCPP_ERROR(LOGGER,"Switching controller failed while tryint to switch to %s from %s",joint_vel_controller_.c_str(),joint_traj_controller_.c_str());
@@ -245,32 +251,19 @@ bool EEServo::unprepare_servo_(){
     switch_controller_msg->strictness = switch_controller_msg->BEST_EFFORT;
     switch_controller_msg->timeout = rclcpp::Duration(5s);
 
-    auto stop_servo_future = stop_servo_client_->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
-    if(stop_servo_future.wait_for(5s)!=std::future_status::ready){
-        RCLCPP_ERROR(LOGGER,"Stop Servo call timed out");
+    auto switch_controller_future = switch_controller_client_->async_send_request(switch_controller_msg);
+    if(switch_controller_future.wait_for(5s)!=std::future_status::ready){
+        RCLCPP_ERROR(LOGGER,"Switch controller timed out while switching from %s to %s",joint_vel_controller_,joint_traj_controller_);
         return false;
     }
     else{
-        auto res = stop_servo_future.get();
-        if(res->success){
-            auto switch_controller_future = switch_controller_client_->async_send_request(switch_controller_msg);
-            if(switch_controller_future.wait_for(5s)!=std::future_status::ready){
-                RCLCPP_ERROR(LOGGER,"Switch controller timed out while switching from %s to %s",joint_vel_controller_,joint_traj_controller_);
-                return false;
-            }
-            else{
-                RCLCPP_INFO(LOGGER,"Switch controller finished");
-                auto success = switch_controller_future.get()->ok;
-                if(success)
-                    current_state_ = State::NOT_READY;
-                return success;
-            }
-        }
-        else{
-            RCLCPP_ERROR(LOGGER,"Stop servo call failed, message : %s",res->message.c_str());
-            return false;
-        }
+        RCLCPP_INFO(LOGGER,"Switch controller finished");
+        auto success = switch_controller_future.get()->ok;
+        if(success)
+            current_state_ = State::NOT_READY;
+        return success;
     }
+    
 }
 
 bool EEServo::start_servo_(){

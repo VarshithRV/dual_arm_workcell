@@ -12,71 +12,60 @@ joint_limits:
     has_velocity_limits: true
     max_velocity: 3.1415926535897931
     has_acceleration_limits: true
-    max_acceleration: 7.28
-    min_acceleration: -7.82
+    max_acceleration: 1.0
+    has_jerk_limits: true
   left_shoulder_lift_joint:
     has_velocity_limits: true
     max_velocity: 2.0943951023931953
     has_acceleration_limits: true
-    max_acceleration: 7.28
-    min_acceleration: -7.82
+    max_acceleration: 1.0
   left_shoulder_pan_joint:
     has_velocity_limits: true
     max_velocity: 2.0943951023931953
     has_acceleration_limits: true
-    max_acceleration: 7.28
-    min_acceleration: -7.82
+    max_acceleration: 1.0
   left_wrist_1_joint:
     has_velocity_limits: true
     max_velocity: 3.1415926535897931
     has_acceleration_limits: true
-    max_acceleration: 7.28
-    min_acceleration: -7.82
+    max_acceleration: 1.0
   left_wrist_2_joint:
     has_velocity_limits: true
     max_velocity: 3.1415926535897931
     has_acceleration_limits: true
-    max_acceleration: 7.28
-    min_acceleration: -7.82
+    max_acceleration: 1.0
   left_wrist_3_joint:
     has_velocity_limits: true
     max_velocity: 3.1415926535897931
     has_acceleration_limits: true
-    max_acceleration: 7.28
-    min_acceleration: -7.82
+    max_acceleration: 1.0
   right_elbow_joint:
     has_velocity_limits: true
     max_velocity: 3.1415926535897931
     has_acceleration_limits: true
-    max_acceleration: 7.28
-    min_acceleration: -7.82
+    max_acceleration: 1.0
   right_shoulder_lift_joint:
     has_velocity_limits: true
     max_velocity: 2.0943951023931953
     has_acceleration_limits: true
-    max_acceleration: 7.28
-    min_acceleration: -7.82
+    max_acceleration: 1.0
   right_shoulder_pan_joint:
     has_velocity_limits: true
     max_velocity: 2.0943951023931953
     has_acceleration_limits: true
-    max_acceleration: 7.28
-    min_acceleration: -7.82
+    max_acceleration: 1.0
   right_wrist_1_joint:
     has_velocity_limits: true
     max_velocity: 3.1415926535897931
     has_acceleration_limits: true
-    max_acceleration: 7.28
-    min_acceleration: -7.82
+    max_acceleration: 1.0
   right_wrist_2_joint:
     has_velocity_limits: true
     max_velocity: 3.1415926535897931
     has_acceleration_limits: true
-    max_acceleration: 7.28
-    min_acceleration: -7.82
+    max_acceleration: 1.0
   right_wrist_3_joint:
     has_velocity_limits: true
     max_velocity: 3.1415926535897931
     has_acceleration_limits: true
-    max_acceleration: 7.28
-    min_acceleration: -7.82
+    max_acceleration: 1.0

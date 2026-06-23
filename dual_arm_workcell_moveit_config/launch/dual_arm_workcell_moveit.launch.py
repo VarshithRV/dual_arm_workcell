@@ -455,7 +455,7 @@ def launch_setup(context, *args, **kwargs):
             robot_description_semantic,
             robot_description_kinematics,
             robot_description_planning,
-            {"update_period": 0.01},
+            {"update_period": 0.03},
             {"planning_group_name": "right_ur16e"},
             {
                 "use_sim_time": use_sim_time,

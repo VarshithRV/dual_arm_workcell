@@ -23,6 +23,7 @@
 #include "std_srvs/srv/trigger.hpp"
 #include "std_msgs/msg/int16.hpp"
 #include "moveit/move_group_interface/move_group_interface.h"
+#include "moveit_msgs/srv/servo_command_type.hpp"
 #include "moveit_msgs/msg/robot_trajectory.hpp"
 #include "motion_planning_abstractions_msgs/srv/generate_trajectory.hpp"
 #include "controller_manager_msgs/srv/switch_controller.hpp"
@@ -59,6 +60,8 @@ public:
     // iir filter on velocity at a constant rate
     void iir_filter_(geometry_msgs::msg::TwistStamped input, geometry_msgs::msg::TwistStamped& output);
 
+    void initialize_servo_interface_();
+
 private:
     
     // internal data
@@ -87,8 +90,7 @@ private:
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr stop_servo_server_;
 
     // clients
-    rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr start_servo_client_;
-    rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr stop_servo_client_;
+    rclcpp::Client<moveit_msgs::srv::ServoCommandType>::SharedPtr switch_command_type_client_;
     rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedPtr switch_controller_client_;
 
     // timers
