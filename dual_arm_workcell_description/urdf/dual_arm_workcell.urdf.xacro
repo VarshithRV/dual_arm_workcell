@@ -19,8 +19,8 @@
    <xacro:arg name="left_ur_type" default="ur16e"/>
    <xacro:arg name="left_name" default="left_ur16e"/>
    <xacro:arg name="left_tf_prefix" default="" />
-   <xacro:arg name="left_joint_limit_params" default="$(find dual_arm_workcell_description)/config/$(arg left_ur_type)/joint_limits.yaml"/>
-   <xacro:arg name="left_kinematics_params" default="$(find dual_arm_workcell_description)/config/$(arg left_ur_type)/default_kinematics.yaml"/>
+   <xacro:arg name="left_joint_limit_params" default="$(find dual_arm_workcell_description)/config/left_ur16e/joint_limits.yaml"/>
+   <xacro:arg name="left_kinematics_params" default="$(find dual_arm_workcell_description)/config/left_ur16e/default_kinematics.yaml"/>
    <xacro:arg name="left_physical_params" default="$(find dual_arm_workcell_description)/config/$(arg left_ur_type)/physical_parameters.yaml"/>
    <xacro:arg name="left_visual_params" default="$(find dual_arm_workcell_description)/config/$(arg left_ur_type)/visual_parameters.yaml"/>
    <xacro:arg name="left_transmission_hw_interface" default=""/>
@@ -62,8 +62,8 @@
    <xacro:arg name="right_ur_type" default="ur16e"/>
    <xacro:arg name="right_name" default="right_ur16e"/>
    <xacro:arg name="right_tf_prefix" default="" />
-   <xacro:arg name="right_joint_limit_params" default="$(find dual_arm_workcell_description)/config/$(arg right_ur_type)/joint_limits.yaml"/>
-   <xacro:arg name="right_kinematics_params" default="$(find dual_arm_workcell_description)/config/$(arg right_ur_type)/default_kinematics.yaml"/>
+   <xacro:arg name="right_joint_limit_params" default="$(find dual_arm_workcell_description)/config/right_ur16e/joint_limits.yaml"/>
+   <xacro:arg name="right_kinematics_params" default="$(find dual_arm_workcell_description)/config/right_ur16e/default_kinematics.yaml"/>
    <xacro:arg name="right_physical_params" default="$(find dual_arm_workcell_description)/config/$(arg right_ur_type)/physical_parameters.yaml"/>
    <xacro:arg name="right_visual_params" default="$(find dual_arm_workcell_description)/config/$(arg right_ur_type)/visual_parameters.yaml"/>
    <xacro:arg name="right_transmission_hw_interface" default=""/>

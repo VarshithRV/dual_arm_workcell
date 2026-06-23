@@ -401,7 +401,7 @@ bool BareBonesMoveit::execute_waypoints(const std::vector<geometry_msgs::msg::Po
     }
     RCLCPP_INFO(node_->get_logger(),"Trajectory created, attempting to execute now");
     moveit::planning_interface::MoveGroupInterface::Plan plan;
-    plan.trajectory_ = trajectory;
+    plan.trajectory = trajectory;
     auto result = move_group_interface_->execute(plan);
     if(result != moveit::core::MoveItErrorCode::SUCCESS){
         RCLCPP_ERROR(node_->get_logger(), "Cartesian path execution failed");

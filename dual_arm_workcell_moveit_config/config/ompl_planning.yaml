@@ -52,7 +52,7 @@ planner_configs:
     max_nearest_neighbors: 10  # use k nearest neighbors. default: 10
   PRMstarkConfigDefault:
     type: geometric::PRMstar
-ur_manipulator:
+left_ur16e:
   planner_configs:
     - SBLkConfigDefault
     - ESTkConfigDefault
@@ -65,6 +65,20 @@ ur_manipulator:
     - TRRTkConfigDefault
     - PRMkConfigDefault
     - PRMstarkConfigDefault
+right_ur16e:
+  planner_configs:
+    - SBLkConfigDefault
+    - ESTkConfigDefault
+    - LBKPIECEkConfigDefault
+    - BKPIECEkConfigDefault
+    - KPIECEkConfigDefault
+    - RRTkConfigDefault
+    - RRTConnectkConfigDefault
+    - RRTstarkConfigDefault
+    - TRRTkConfigDefault
+    - PRMkConfigDefault
+    - PRMstarkConfigDefault
+
   ##Note: commenting the following line lets moveit chose RRTConnect as default planner rather than LBKPIECE
   #projection_evaluator: joints(shoulder_pan_joint,shoulder_lift_joint)
   longest_valid_segment_fraction: 0.01

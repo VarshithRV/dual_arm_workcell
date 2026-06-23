@@ -32,7 +32,8 @@ import os
 
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
-from ur_moveit_config.launch_common import load_yaml
+import yaml
+from ament_index_python.packages import get_package_share_directory
 from launch_ros.parameter_descriptions import ParameterValue
 
 from launch import LaunchDescription
@@ -44,6 +45,17 @@ from launch.substitutions import (
     LaunchConfiguration,
     PathJoinSubstitution,
 )
+
+
+def load_yaml(package_name, file_path):
+    package_path = get_package_share_directory(package_name)
+    absolute_file_path = os.path.join(package_path, file_path)
+
+    try:
+        with open(absolute_file_path) as file:
+            return yaml.safe_load(file)
+    except OSError:  # parent of IOError, OSError *and* WindowsError where available
+        return None
 
 
 def launch_setup(context, *args, **kwargs):
@@ -307,16 +319,32 @@ def launch_setup(context, *args, **kwargs):
         )
     }
 
-    # Planning Configuration
+
+
+    ompl_planning_yaml = load_yaml(
+        "dual_arm_workcell_moveit_config",
+        "config/ompl_planning.yaml"
+    )
+
     ompl_planning_pipeline_config = {
-        "move_group": {
-            "planning_plugin": "ompl_interface/OMPLPlanner",
-            "request_adapters": """default_planner_request_adapters/AddTimeOptimalParameterization default_planner_request_adapters/FixWorkspaceBounds default_planner_request_adapters/FixStartStateBounds default_planner_request_adapters/FixStartStateCollision default_planner_request_adapters/FixStartStatePathConstraints""",
+        "planning_pipelines": ["ompl"],
+        "default_planning_pipeline": "ompl",
+        "ompl": {
+            "planning_plugins": ["ompl_interface/OMPLPlanner"],
+            "request_adapters": [
+                "default_planning_request_adapters/ResolveConstraintFrames",
+                "default_planning_request_adapters/ValidateWorkspaceBounds",
+                "default_planning_request_adapters/CheckStartStateBounds",
+                "default_planning_request_adapters/CheckStartStateCollision",
+            ],
+            "response_adapters":[
+                "default_planning_response_adapters/AddTimeOptimalParameterization",
+                "default_planning_response_adapters/ValidateSolution",
+                "default_planning_response_adapters/DisplayMotionPath",
+            ],
             "start_state_max_bounds_error": 0.1,
-        }
+        },
     }
-    ompl_planning_yaml = load_yaml("dual_arm_workcell_moveit_config", "config/ompl_planning.yaml")
-    ompl_planning_pipeline_config["move_group"].update(ompl_planning_yaml)
 
     # Trajectory Execution Configuration
     controllers_yaml = load_yaml("dual_arm_workcell_moveit_config", "config/controllers.yaml")
@@ -396,14 +424,19 @@ def launch_setup(context, *args, **kwargs):
     left_servo_node = Node(
         package="moveit_servo",
         condition=IfCondition(launch_servo),
-        executable="servo_node_main",
+        executable="servo_node",
         name="left_servo_node_main",
         parameters=[
             left_servo_params,
-            {"butterworth_filter_coeff": 1.5}, ## moveit servo doesn't load low pass filter coeff, default is 1.5
             robot_description,
             robot_description_semantic,
             robot_description_kinematics,
+            robot_description_planning,
+            {"update_period": 0.01},
+            {"planning_group_name": "left_ur16e"},
+            {
+                "use_sim_time": use_sim_time,
+            },
         ],
         output="screen",
     )
@@ -414,19 +447,29 @@ def launch_setup(context, *args, **kwargs):
     right_servo_node = Node(
         package="moveit_servo",
         condition=IfCondition(launch_servo),
-        executable="servo_node_main",
+        executable="servo_node",
         name="right_servo_node_main",
         parameters=[
             right_servo_params,
-            {"butterworth_filter_coeff": 1.5}, ## moveit servo doesn't load low pass filter coeff, default is 1.5
             robot_description,
             robot_description_semantic,
             robot_description_kinematics,
+            robot_description_planning,
+            {"update_period": 0.01},
+            {"planning_group_name": "right_ur16e"},
+            {
+                "use_sim_time": use_sim_time,
+            },
         ],
         output="screen",
     )
 
-    nodes_to_start = [move_group_node, left_servo_node, right_servo_node, rviz_node]
+    nodes_to_start = [
+        move_group_node, 
+        left_servo_node,
+        right_servo_node,
+        rviz_node
+    ]
 
     return nodes_to_start
 

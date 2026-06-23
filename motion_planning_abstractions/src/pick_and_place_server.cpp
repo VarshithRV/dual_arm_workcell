@@ -208,7 +208,7 @@ class PickPlace{
             RCLCPP_INFO(node_->get_logger(),"Trajectory created attempting to execute now");
 
             moveit::planning_interface::MoveGroupInterface::Plan plan;
-            plan.trajectory_ = trajectory;
+            plan.trajectory = trajectory;
         
             auto result = move_group_interface_->execute(plan);
 

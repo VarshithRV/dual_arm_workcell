@@ -19,7 +19,7 @@ class ServoTwistPublisher(Node):
         )
 
         # publish at 50 Hz (MoveIt Servo typical rate)
-        self.timer = self.create_timer(0.034, self.timer_callback)
+        self.timer = self.create_timer(0.005, self.timer_callback)
 
     def timer_callback(self):
         
@@ -31,7 +31,7 @@ class ServoTwistPublisher(Node):
         # linear velocity
         msg.twist.linear.x = 0.0
         msg.twist.linear.y = 0.0
-        msg.twist.linear.z = 0.1
+        msg.twist.linear.z = 0.01
 
         # angular velocity
         msg.twist.angular.x = 0.0
