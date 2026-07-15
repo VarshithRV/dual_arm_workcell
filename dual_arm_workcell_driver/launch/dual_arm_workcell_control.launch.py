@@ -432,17 +432,17 @@ def launch_setup(context, *args, **kwargs):
     controllers_active = [
         "joint_state_broadcaster",
         "left_scaled_joint_trajectory_controller",
-        "left_io_and_status_controller",
         "left_speed_scaling_state_broadcaster",
         "left_force_torque_sensor_broadcaster",
         "left_tcp_pose_broadcaster",
         "left_ur_configuration_controller",
         "right_scaled_joint_trajectory_controller",
-        "right_io_and_status_controller",
         "right_speed_scaling_state_broadcaster",
         "right_force_torque_sensor_broadcaster",
         "right_tcp_pose_broadcaster",
         "right_ur_configuration_controller",
+        "right_io_and_status_controller",
+        "left_io_and_status_controller",
     ]
     
     robot_state_publisher_node = Node(
