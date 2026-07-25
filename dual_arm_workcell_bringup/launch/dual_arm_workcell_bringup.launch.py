@@ -11,10 +11,10 @@ import math
 
 def launch_setup():
     left_robot_ip = LaunchConfiguration('left_robot_ip')
-    left_translation = [-0.577,0.529,0.00]
+    left_translation = [-0.46,0.529,0.00]
     left_rotation = [0.0,0.0,math.pi/2]
     right_robot_ip = LaunchConfiguration('right_robot_ip')
-    right_translation = [0.577,0.529,0.00]
+    right_translation = [0.46,0.529,0.00]
     right_rotation = [0.0,0.0,math.pi/2]
     use_fake_hardware = LaunchConfiguration('use_fake_hardware')
     use_sim_time = LaunchConfiguration('use_sim_time')
@@ -134,7 +134,7 @@ def generate_launch_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             name="left_robot_ip",
-            default_value="192.168.1.4",
+            default_value="192.168.1.3",
             description="Left ur16e ip address",
         )
     )
@@ -142,7 +142,7 @@ def generate_launch_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             name="right_robot_ip",
-            default_value="192.168.1.3",
+            default_value="192.168.1.4",
             description="Right ur16e ip address",
         )
     )
