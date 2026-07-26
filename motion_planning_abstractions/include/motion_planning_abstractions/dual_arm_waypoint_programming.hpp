@@ -86,7 +86,7 @@ public:
         print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",std::bind(&DualArmControlInterface::print_state, this,std::placeholders::_1, std::placeholders::_2),rmw_qos_profile_services_default,callback_group_);
 
         // service clients
-        left_execute_trajectory_client_ = node_->create_client<std_srvs::srv::Trigger>("/left_task_space_cubic_polynomial_trajectory_server/execute_trajectory");
+        left_execute_trajectory_client_ = node_->create_client<std_srvs::srv::Trigger>("/left_task_space_cubic_polynomial_trajectory_server/execute_trajectory",rmw_qos_profile_services_default,callback_group_);
         right_execute_trajectory_client_ = node_->create_client<std_srvs::srv::Trigger>("/right_task_space_cubic_polynomial_trajectory_server/execute_trajectory");
         
         left_generate_trajectory_client_ = node_->create_client<motion_planning_abstractions_msgs::srv::GenerateTrajectory>("/left_task_space_cubic_polynomial_trajectory_server/generate_trajectory");

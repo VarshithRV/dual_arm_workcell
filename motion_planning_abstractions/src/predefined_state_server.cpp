@@ -50,6 +50,7 @@ class PredefinedStateServer{
 
             move_group_interface_ = std::make_shared<MoveGroupInterface>(moveit_node_, planning_group_);
             
+            reentrant_callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
             move_group_interface_->startStateMonitor();
             move_group_interface_->setMaxVelocityScalingFactor(1.0);
             move_group_interface_->setMaxAccelerationScalingFactor(1.0);
@@ -59,8 +60,15 @@ class PredefinedStateServer{
             moveit_executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
             moveit_executor_->add_node(moveit_node_);
 
-            print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",std::bind(&PredefinedStateServer::print_state, this, std::placeholders::_1, std::placeholders::_2));
-            move_to_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/move_to_state",std::bind(&PredefinedStateServer::move_to_joint_state, this, std::placeholders::_1, std::placeholders::_2));
+            print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",std::bind(&PredefinedStateServer::print_state, this, std::placeholders::_1, std::placeholders::_2),
+                rmw_qos_profile_services_default,
+                reentrant_callback_group_
+            );
+            
+            move_to_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/move_to_state",std::bind(&PredefinedStateServer::move_to_joint_state, this, std::placeholders::_1, std::placeholders::_2),
+                rmw_qos_profile_services_default,
+                reentrant_callback_group_
+            );
             
             RCLCPP_INFO(node_->get_logger(),"Started the tutorials node");
             
@@ -139,6 +147,7 @@ class PredefinedStateServer{
         rclcpp::Executor::SharedPtr moveit_executor_;
         std::thread thread_;
 
+        rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_;
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_state_server_;
         rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr move_to_state_server_;
         std::string planning_group_;
