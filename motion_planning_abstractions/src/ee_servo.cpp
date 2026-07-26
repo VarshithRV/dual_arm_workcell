@@ -216,7 +216,7 @@ bool EEServo::prepare_servo_(){
     switch_controller_msg->timeout = rclcpp::Duration(5s);
 
     auto switch_controller_future = switch_controller_client_->async_send_request(switch_controller_msg);
-    if(switch_controller_future.wait_for(5s) != std::future_status::ready){
+    if(switch_controller_future.wait_for(15s) != std::future_status::ready){
         RCLCPP_ERROR(LOGGER,"Switch Controller Timed out");
         return false;
     }
