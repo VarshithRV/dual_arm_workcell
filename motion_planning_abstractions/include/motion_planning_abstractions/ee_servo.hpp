@@ -100,6 +100,8 @@ private:
 
     // callback group
     rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_;
+    rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_2_;
+    rclcpp::CallbackGroup::SharedPtr reentrant_callback_group_3_;
     rclcpp::CallbackGroup::SharedPtr mex_callback_group_;
 };
 #endif

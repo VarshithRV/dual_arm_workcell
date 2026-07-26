@@ -63,6 +63,8 @@ EEServo::EEServo(rclcpp::Node::SharedPtr node){
 
     // callback group for servers
     reentrant_callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+    reentrant_callback_group_2_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+    reentrant_callback_group_3_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
     mex_callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
     // declare and get the ros parameters
@@ -92,8 +94,16 @@ EEServo::EEServo(rclcpp::Node::SharedPtr node){
     velocity_publisher_ = node_->create_publisher<geometry_msgs::msg::TwistStamped>(servo_node_ns_ + "/delta_twist_cmds",qos_profile);
 
     // init clients
-    switch_command_type_client_ = node_->create_client<moveit_msgs::srv::ServoCommandType>(servo_node_ns_+"/switch_command_type",rmw_qos_profile_services_default,reentrant_callback_group_);
-    switch_controller_client_ = node_->create_client<controller_manager_msgs::srv::SwitchController>("/controller_manager/switch_controller",rmw_qos_profile_services_default,reentrant_callback_group_);
+    switch_command_type_client_ = node_->create_client<moveit_msgs::srv::ServoCommandType>(
+        servo_node_ns_+"/switch_command_type",
+        rmw_qos_profile_services_default,
+        reentrant_callback_group_2_
+    );
+    switch_controller_client_ = node_->create_client<controller_manager_msgs::srv::SwitchController>(
+        "/controller_manager/switch_controller",
+        rmw_qos_profile_services_default,
+        reentrant_callback_group_
+    );
 
     // init servers
     prepare_servo_server_ = node_->create_service<std_srvs::srv::Trigger>(
@@ -118,7 +128,7 @@ EEServo::EEServo(rclcpp::Node::SharedPtr node){
             res->success = start_servo_();
         },
         rmw_qos_profile_services_default,
-        reentrant_callback_group_
+        reentrant_callback_group_2_
     );
     stop_servo_server_ = node_->create_service<std_srvs::srv::Trigger>(
         "~/stop_servo",
@@ -126,7 +136,7 @@ EEServo::EEServo(rclcpp::Node::SharedPtr node){
             res->success = stop_servo_();
         },
         rmw_qos_profile_services_default,
-        reentrant_callback_group_
+        reentrant_callback_group_2_
     );
 
     // Init timers
@@ -148,7 +158,7 @@ EEServo::EEServo(rclcpp::Node::SharedPtr node){
                 velocity_publisher_->publish(filtered_velocity_setpoint_);
             }
         },
-        reentrant_callback_group_
+        reentrant_callback_group_3_
     );
 
     filter_velocity_timer_ = node_->create_wall_timer(
@@ -156,7 +166,7 @@ EEServo::EEServo(rclcpp::Node::SharedPtr node){
         [this,LOGGER](){
             iir_filter_(current_velocity_setpoint_,filtered_velocity_setpoint_);
         },
-        reentrant_callback_group_
+        reentrant_callback_group_3_
     );
 }
 
