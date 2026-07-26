@@ -172,15 +172,6 @@ EEServo::EEServo(rclcpp::Node::SharedPtr node){
 
 void EEServo::initialize_servo_interface_(){
     auto LOGGER = node_->get_logger();
-    auto switch_command_type_req = std::make_shared<moveit_msgs::srv::ServoCommandType::Request>();
-    switch_command_type_req->command_type = switch_command_type_req->TWIST;
-    auto switch_command_type_future = switch_command_type_client_->async_send_request(switch_command_type_req);
-    if(switch_command_type_future.wait_for(5s)!=std::future_status::ready){
-        RCLCPP_ERROR(LOGGER,"Switch command type client timed out!");
-    }
-    else{
-        RCLCPP_INFO(LOGGER,"Switch command type to twist finished");
-    }
 }
 
 void EEServo::set_vel_setpoint_(geometry_msgs::msg::TwistStamped vel){
@@ -210,7 +201,15 @@ void EEServo::iir_filter_(geometry_msgs::msg::TwistStamped input, geometry_msgs:
 
 bool EEServo::prepare_servo_(){
     auto LOGGER = node_->get_logger();
-
+    auto switch_command_type_req = std::make_shared<moveit_msgs::srv::ServoCommandType::Request>();
+    switch_command_type_req->command_type = switch_command_type_req->TWIST;
+    auto switch_command_type_future = switch_command_type_client_->async_send_request(switch_command_type_req);
+    if(switch_command_type_future.wait_for(5s)!=std::future_status::ready){
+        RCLCPP_ERROR(LOGGER,"Switch command type client timed out!");
+    }
+    else{
+        RCLCPP_INFO(LOGGER,"Switch command type to twist finished");
+    }
     if(current_state_==State::ARMED){
         RCLCPP_ERROR(LOGGER,"In ARMED state, not safe to switch controllers");
         return false;
