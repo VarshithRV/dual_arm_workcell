@@ -820,7 +820,7 @@ public:
             return;
         }
 
-        if(std::abs(linear_deviation)>1e-3 || std::abs(angular_deviation)>1e-2){
+        if(std::abs(linear_deviation)>1e-4 || std::abs(angular_deviation)>1e-3){
             waypoints.insert(waypoints.begin(),current_pose);
             if(durations.size()!=0.0){
                 if(durations.front()==0.0){
