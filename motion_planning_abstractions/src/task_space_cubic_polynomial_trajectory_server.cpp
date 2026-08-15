@@ -143,31 +143,31 @@ public:
 
         // servers
         callback_group_ = node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-        print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",std::bind(&TSCubicPolynomialTraj::print_state, this,std::placeholders::_1, std::placeholders::_2),rmw_qos_profile_services_default,callback_group_);
-        test_server_ = node_->create_service<std_srvs::srv::Trigger>("~/test_server",
-            [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
-                res->success = test_server_callback_();
-                return;
-            },
-            rmw_qos_profile_services_default,
-            callback_group_
-        );
-        print_latest_trajectory_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_latest_trajectory",
-            [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
-                res->success = print_latest_trajectory_server_callback_();
-                return;
-            },
-            rmw_qos_profile_services_default,
-            callback_group_
-        );
-        print_latest_joint_space_trajectory_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_latest_joint_space_trajectory",
-            [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
-                res->success = print_latest_joint_space_trajectory_server_callback_();
-                return;
-            },
-            rmw_qos_profile_services_default,
-            callback_group_
-        );
+        // print_state_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_robot_state",std::bind(&TSCubicPolynomialTraj::print_state, this,std::placeholders::_1, std::placeholders::_2),rmw_qos_profile_services_default,callback_group_);
+        // test_server_ = node_->create_service<std_srvs::srv::Trigger>("~/test_server",
+        //     [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
+        //         res->success = test_server_callback_();
+        //         return;
+        //     },
+        //     rmw_qos_profile_services_default,
+        //     callback_group_
+        // );
+        // print_latest_trajectory_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_latest_trajectory",
+        //     [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
+        //         res->success = print_latest_trajectory_server_callback_();
+        //         return;
+        //     },
+        //     rmw_qos_profile_services_default,
+        //     callback_group_
+        // );
+        // print_latest_joint_space_trajectory_server_ = node_->create_service<std_srvs::srv::Trigger>("~/print_latest_joint_space_trajectory",
+        //     [this](std_srvs::srv::Trigger::Request::SharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res){
+        //         res->success = print_latest_joint_space_trajectory_server_callback_();
+        //         return;
+        //     },
+        //     rmw_qos_profile_services_default,
+        //     callback_group_
+        // );
         generate_trajectory_server_ = node_->create_service<motion_planning_abstractions_msgs::srv::GenerateTrajectory>("~/generate_trajectory", 
             [this](motion_planning_abstractions_msgs::srv::GenerateTrajectory::Request::SharedPtr req, motion_planning_abstractions_msgs::srv::GenerateTrajectory::Response::SharedPtr res){
                 generate_trajectory_server_callback_(req,res);
@@ -192,8 +192,8 @@ public:
             callback_group_
         );
 
-        // publisher
-        jt_publisher_ = node_->create_publisher<trajectory_msgs::msg::JointTrajectory>("~/latest_trajectory",10);
+        // // publisher
+        // jt_publisher_ = node_->create_publisher<trajectory_msgs::msg::JointTrajectory>("~/latest_trajectory",10);
 
         // action clients
         sjtc_client_ptr_ = rclcpp_action::create_client<control_msgs::action::FollowJointTrajectory>(
@@ -207,16 +207,16 @@ public:
             rclcpp::shutdown();
         }
 
-        // timers
-        latest_jt_publisher_timer_ = node_->create_wall_timer(200ms,
-            [this](){
-                if(latest_joint_trajectory_ !=nullptr){
-                    auto msg = trajectory_msgs::msg::JointTrajectory(*latest_joint_trajectory_); 
-                    jt_publisher_->publish(msg);
-                }
-            },
-            callback_group_
-        );
+        // // timers
+        // latest_jt_publisher_timer_ = node_->create_wall_timer(200ms,
+        //     [this](){
+        //         if(latest_joint_trajectory_ !=nullptr){
+        //             auto msg = trajectory_msgs::msg::JointTrajectory(*latest_joint_trajectory_); 
+        //             jt_publisher_->publish(msg);
+        //         }
+        //     },
+        //     callback_group_
+        // );
 
         executor_->spin();
     }
@@ -1002,158 +1002,158 @@ public:
         }
     }
 
-    // TEST SERVER CALLBACK HERE
-    bool test_server_callback_(){
-        RCLCPP_INFO(node_->get_logger(),"Entered test service");
+    // // TEST SERVER CALLBACK HERE
+    // bool test_server_callback_(){
+    //     RCLCPP_INFO(node_->get_logger(),"Entered test service");
         
-        geometry_msgs::msg::Pose w_in,w_f;
-        geometry_msgs::msg::Twist v_in,v_f;
+    //     geometry_msgs::msg::Pose w_in,w_f;
+    //     geometry_msgs::msg::Twist v_in,v_f;
         
-        w_in.position.x = 0.1;
-        w_f.position.x = 1.0;
-        w_in.position.y = -0.5;
-        w_f.position.y = -0.1;
-        w_in.position.z = 0.0;
-        w_f.position.z = 0.1;
-        v_f.linear.x = 0.1;
-        v_f.linear.z = 0.5;
-        w_in.orientation.w = 1;
-        w_in.orientation.x = 1;
-        double duration = 0.55;
-        double dt = 0.05;
+    //     w_in.position.x = 0.1;
+    //     w_f.position.x = 1.0;
+    //     w_in.position.y = -0.5;
+    //     w_f.position.y = -0.1;
+    //     w_in.position.z = 0.0;
+    //     w_f.position.z = 0.1;
+    //     v_f.linear.x = 0.1;
+    //     v_f.linear.z = 0.5;
+    //     w_in.orientation.w = 1;
+    //     w_in.orientation.x = 1;
+    //     double duration = 0.55;
+    //     double dt = 0.05;
 
-        // std::vector<TSCubicPolynomialTraj::trajPoint> trajectory =  generate_trajectory_(w_in,v_in,w_f,v_f,duration,dt);
-        // if(this->latest_trajectory_ == nullptr){
-        //     latest_trajectory_ = std::make_shared<std::vector<TSCubicPolynomialTraj::trajPoint>>();
-        // }
-        // *latest_trajectory_ = trajectory;
+    //     // std::vector<TSCubicPolynomialTraj::trajPoint> trajectory =  generate_trajectory_(w_in,v_in,w_f,v_f,duration,dt);
+    //     // if(this->latest_trajectory_ == nullptr){
+    //     //     latest_trajectory_ = std::make_shared<std::vector<TSCubicPolynomialTraj::trajPoint>>();
+    //     // }
+    //     // *latest_trajectory_ = trajectory;
 
-        geometry_msgs::msg::Pose wp1,wp2,wp3,wp4;
-        // Waypoint 1
-        wp1.position.x = 0.289;
-        wp1.position.y = 0.766;
-        wp1.position.z = 0.697;
-        wp1.orientation.x = -0.500;
-        wp1.orientation.y = -0.500;
-        wp1.orientation.z =  0.500;
-        wp1.orientation.w =  0.500;
+    //     geometry_msgs::msg::Pose wp1,wp2,wp3,wp4;
+    //     // Waypoint 1
+    //     wp1.position.x = 0.289;
+    //     wp1.position.y = 0.766;
+    //     wp1.position.z = 0.697;
+    //     wp1.orientation.x = -0.500;
+    //     wp1.orientation.y = -0.500;
+    //     wp1.orientation.z =  0.500;
+    //     wp1.orientation.w =  0.500;
             
-        // Waypoint 2
-        wp2.position.x = 0.558;
-        wp2.position.y = 0.830;
-        wp2.position.z = 0.823;
-        wp2.orientation.x = -0.630;
-        wp2.orientation.y = -0.321;
-        wp2.orientation.z =  0.322;
-        wp2.orientation.w =  0.629;
+    //     // Waypoint 2
+    //     wp2.position.x = 0.558;
+    //     wp2.position.y = 0.830;
+    //     wp2.position.z = 0.823;
+    //     wp2.orientation.x = -0.630;
+    //     wp2.orientation.y = -0.321;
+    //     wp2.orientation.z =  0.322;
+    //     wp2.orientation.w =  0.629;
             
-        // Waypoint 3
-        wp3.position.x = 0.494;
-        wp3.position.y = 1.155;
-        wp3.position.z = 0.735;
-        wp3.orientation.x = -0.627;
-        wp3.orientation.y = -0.327;
-        wp3.orientation.z =  0.328;
-        wp3.orientation.w =  0.626;
+    //     // Waypoint 3
+    //     wp3.position.x = 0.494;
+    //     wp3.position.y = 1.155;
+    //     wp3.position.z = 0.735;
+    //     wp3.orientation.x = -0.627;
+    //     wp3.orientation.y = -0.327;
+    //     wp3.orientation.z =  0.328;
+    //     wp3.orientation.w =  0.626;
             
-        // Waypoint 4
-        wp4.position.x = 0.316;
-        wp4.position.y = 0.899;
-        wp4.position.z = 0.862;
-        wp4.orientation.x = -0.627;
-        wp4.orientation.y = -0.327;
-        wp4.orientation.z =  0.328;
-        wp4.orientation.w =  0.626;
+    //     // Waypoint 4
+    //     wp4.position.x = 0.316;
+    //     wp4.position.y = 0.899;
+    //     wp4.position.z = 0.862;
+    //     wp4.orientation.x = -0.627;
+    //     wp4.orientation.y = -0.327;
+    //     wp4.orientation.z =  0.328;
+    //     wp4.orientation.w =  0.626;
 
-        std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>> trajectory = waypointPlanning(std::vector<geometry_msgs::msg::Pose>{wp1,wp2,wp3,wp4},std::vector<double>{0.0,0.1,0.2,0.0},std::vector<double>{2,2,2,2});
-        latest_trajectory_ = trajectory;
-        std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>> js_traj = generate_js_traj(trajectory);
+    //     std::shared_ptr<std::vector<TSCubicPolynomialTraj::trajPoint>> trajectory = waypointPlanning(std::vector<geometry_msgs::msg::Pose>{wp1,wp2,wp3,wp4},std::vector<double>{0.0,0.1,0.2,0.0},std::vector<double>{2,2,2,2});
+    //     latest_trajectory_ = trajectory;
+    //     std::shared_ptr<std::vector<TSCubicPolynomialTraj::jointSpaceTrajPoint>> js_traj = generate_js_traj(trajectory);
 
-        // do_ik([](){
-        //     geometry_msgs::msg::Pose pose;
-        //     pose.position.x=0.1;
-        //     pose.position.y=0.4;
-        //     pose.position.z=0.1;
-        //     pose.orientation.w=1.0;
-        //     return pose;
-        // }());
+    //     // do_ik([](){
+    //     //     geometry_msgs::msg::Pose pose;
+    //     //     pose.position.x=0.1;
+    //     //     pose.position.y=0.4;
+    //     //     pose.position.z=0.1;
+    //     //     pose.orientation.w=1.0;
+    //     //     return pose;
+    //     // }());
 
-        return true;
-    }
+    //     return true;
+    // }
 
-    bool print_latest_trajectory_server_callback_(){
-        if (latest_trajectory_==nullptr)
-            return false;
+    // bool print_latest_trajectory_server_callback_(){
+    //     if (latest_trajectory_==nullptr)
+    //         return false;
 
-        for(TSCubicPolynomialTraj::trajPoint point :*latest_trajectory_){
-            RCLCPP_INFO(
-                node_->get_logger(),
-                "t=%.3f | "
-                "pos [%.4f %.4f %.4f] | "
-                "quat [%.4f %.4f %.4f %.4f] | "
-                "lin vel [%.4f %.4f %.4f] | "
-                "ang vel [%.4f %.4f %.4f] | "
-                "lin acc [%.4f %.4f %.4f] | "
-                "ang acc [%.4f %.4f %.4f]",
+    //     for(TSCubicPolynomialTraj::trajPoint point :*latest_trajectory_){
+    //         RCLCPP_INFO(
+    //             node_->get_logger(),
+    //             "t=%.3f | "
+    //             "pos [%.4f %.4f %.4f] | "
+    //             "quat [%.4f %.4f %.4f %.4f] | "
+    //             "lin vel [%.4f %.4f %.4f] | "
+    //             "ang vel [%.4f %.4f %.4f] | "
+    //             "lin acc [%.4f %.4f %.4f] | "
+    //             "ang acc [%.4f %.4f %.4f]",
 
-                point.duration_from_start,
+    //             point.duration_from_start,
             
-                point.waypoint.position.x,
-                point.waypoint.position.y,
-                point.waypoint.position.z,
+    //             point.waypoint.position.x,
+    //             point.waypoint.position.y,
+    //             point.waypoint.position.z,
             
-                point.waypoint.orientation.w,
-                point.waypoint.orientation.x,
-                point.waypoint.orientation.y,
-                point.waypoint.orientation.z,
+    //             point.waypoint.orientation.w,
+    //             point.waypoint.orientation.x,
+    //             point.waypoint.orientation.y,
+    //             point.waypoint.orientation.z,
             
-                point.velocity.linear.x,
-                point.velocity.linear.y,
-                point.velocity.linear.z,
+    //             point.velocity.linear.x,
+    //             point.velocity.linear.y,
+    //             point.velocity.linear.z,
             
-                point.velocity.angular.x,
-                point.velocity.angular.y,
-                point.velocity.angular.z,
+    //             point.velocity.angular.x,
+    //             point.velocity.angular.y,
+    //             point.velocity.angular.z,
             
-                point.acceleration.linear.x,
-                point.acceleration.linear.y,
-                point.acceleration.linear.z,
+    //             point.acceleration.linear.x,
+    //             point.acceleration.linear.y,
+    //             point.acceleration.linear.z,
             
-                point.acceleration.angular.x,
-                point.acceleration.angular.y,
-                point.acceleration.angular.z
-            );
-        }
-        RCLCPP_INFO(node_->get_logger(),"Size of the trajectory message : %d",latest_trajectory_->size());
-        return true;
-    }
+    //             point.acceleration.angular.x,
+    //             point.acceleration.angular.y,
+    //             point.acceleration.angular.z
+    //         );
+    //     }
+    //     RCLCPP_INFO(node_->get_logger(),"Size of the trajectory message : %d",latest_trajectory_->size());
+    //     return true;
+    // }
 
-    bool print_latest_joint_space_trajectory_server_callback_(){
-        if(latest_joint_space_trajectory_ ==nullptr)
-            return false;
+    // bool print_latest_joint_space_trajectory_server_callback_(){
+    //     if(latest_joint_space_trajectory_ ==nullptr)
+    //         return false;
 
-        for(TSCubicPolynomialTraj::jointSpaceTrajPoint point :*latest_joint_space_trajectory_){
-            RCLCPP_INFO(
-                node_->get_logger(),
-                "t=%.3f | "
-                "Joint 1 [%.4f %.4f] | "
-                "Joint 2 [%.4f %.4f] | "
-                "Joint 3 [%.4f %.4f] | "
-                "Joint 4 [%.4f %.4f] | "
-                "Joint 5 [%.4f %.4f] | "
-                "Joint 6 [%.4f %.4f]",
-                point.duration_from_start,
-                point.basejoint.position, point.basejoint.velocity,
-                point.shoulderjoint.position, point.shoulderjoint.velocity,
-                point.elbowjoint.position, point.elbowjoint.velocity,
-                point.wrist1.position, point.wrist1.velocity,
-                point.wrist2.position, point.wrist2.velocity,
-                point.wrist3.position, point.wrist3.velocity
-            );
-        }
-        RCLCPP_INFO(node_->get_logger(),"Size of the trajectory message : %d",latest_trajectory_->size());
-        return true;
-    }
+    //     for(TSCubicPolynomialTraj::jointSpaceTrajPoint point :*latest_joint_space_trajectory_){
+    //         RCLCPP_INFO(
+    //             node_->get_logger(),
+    //             "t=%.3f | "
+    //             "Joint 1 [%.4f %.4f] | "
+    //             "Joint 2 [%.4f %.4f] | "
+    //             "Joint 3 [%.4f %.4f] | "
+    //             "Joint 4 [%.4f %.4f] | "
+    //             "Joint 5 [%.4f %.4f] | "
+    //             "Joint 6 [%.4f %.4f]",
+    //             point.duration_from_start,
+    //             point.basejoint.position, point.basejoint.velocity,
+    //             point.shoulderjoint.position, point.shoulderjoint.velocity,
+    //             point.elbowjoint.position, point.elbowjoint.velocity,
+    //             point.wrist1.position, point.wrist1.velocity,
+    //             point.wrist2.position, point.wrist2.velocity,
+    //             point.wrist3.position, point.wrist3.velocity
+    //         );
+    //     }
+    //     RCLCPP_INFO(node_->get_logger(),"Size of the trajectory message : %d",latest_trajectory_->size());
+    //     return true;
+    // }
 
     // given a pose, does ik
     void do_ik(const geometry_msgs::msg::Pose& eepose){
@@ -1184,40 +1184,40 @@ public:
         RCLCPP_INFO_STREAM(node_->get_logger(), "Jacobian: \n" << jacobian << "\n");
     }
     
-    void print_state(const std_srvs::srv::Trigger::Request::SharedPtr request,std_srvs::srv::Trigger::Response::SharedPtr response){
-        auto current_state = move_group_interface_->getCurrentState();
-        (void)current_state;
-        auto current_pose = move_group_interface_->getCurrentPose();
-        auto current_joint_values = move_group_interface_->getCurrentJointValues();
+    // void print_state(const std_srvs::srv::Trigger::Request::SharedPtr request,std_srvs::srv::Trigger::Response::SharedPtr response){
+    //     auto current_state = move_group_interface_->getCurrentState();
+    //     (void)current_state;
+    //     auto current_pose = move_group_interface_->getCurrentPose();
+    //     auto current_joint_values = move_group_interface_->getCurrentJointValues();
 
-        auto print_pose = [this, current_joint_values, current_pose](){
-            double x = current_pose.pose.position.x;
-            double y = current_pose.pose.position.y;
-            double z = current_pose.pose.position.z;
-            double qx = current_pose.pose.orientation.x;
-            double qy = current_pose.pose.orientation.y;
-            double qz = current_pose.pose.orientation.z;
-            double qw = current_pose.pose.orientation.w;
+    //     auto print_pose = [this, current_joint_values, current_pose](){
+    //         double x = current_pose.pose.position.x;
+    //         double y = current_pose.pose.position.y;
+    //         double z = current_pose.pose.position.z;
+    //         double qx = current_pose.pose.orientation.x;
+    //         double qy = current_pose.pose.orientation.y;
+    //         double qz = current_pose.pose.orientation.z;
+    //         double qw = current_pose.pose.orientation.w;
 
-            RCLCPP_INFO(this->node_->get_logger(), "X : %f", x);
-            RCLCPP_INFO(this->node_->get_logger(), "Y : %f", y);
-            RCLCPP_INFO(this->node_->get_logger(), "Z : %f", z);
-            RCLCPP_INFO(this->node_->get_logger(), "Qx : %f", qx);
-            RCLCPP_INFO(this->node_->get_logger(), "Qy : %f", qy);
-            RCLCPP_INFO(this->node_->get_logger(), "Qz : %f", qz);
-            RCLCPP_INFO(this->node_->get_logger(), "Qw : %f", qw);
+    //         RCLCPP_INFO(this->node_->get_logger(), "X : %f", x);
+    //         RCLCPP_INFO(this->node_->get_logger(), "Y : %f", y);
+    //         RCLCPP_INFO(this->node_->get_logger(), "Z : %f", z);
+    //         RCLCPP_INFO(this->node_->get_logger(), "Qx : %f", qx);
+    //         RCLCPP_INFO(this->node_->get_logger(), "Qy : %f", qy);
+    //         RCLCPP_INFO(this->node_->get_logger(), "Qz : %f", qz);
+    //         RCLCPP_INFO(this->node_->get_logger(), "Qw : %f", qw);
 
-            std::string message;
-            for (std::size_t i = 0; i < current_joint_values.size(); i++){
-                message += "Joint " + std::to_string(i) + ": " +std::to_string(current_joint_values[i]) + "\n";
-            }
-            message += "X : " + std::to_string(x) +" Y : " + std::to_string(y) +" Z : " + std::to_string(z);
-            return message;
-        };
+    //         std::string message;
+    //         for (std::size_t i = 0; i < current_joint_values.size(); i++){
+    //             message += "Joint " + std::to_string(i) + ": " +std::to_string(current_joint_values[i]) + "\n";
+    //         }
+    //         message += "X : " + std::to_string(x) +" Y : " + std::to_string(y) +" Z : " + std::to_string(z);
+    //         return message;
+    //     };
 
-        response->message = print_pose();
-        response->success = true;
-    }
+    //     response->message = print_pose();
+    //     response->success = true;
+    // }
 
 private:
     std::thread thread_;
@@ -1237,16 +1237,15 @@ private:
     moveit::core::RobotStatePtr current_robot_state_;
     const moveit::core::JointModelGroup* joint_group_model_;
 
-    // servers
-    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_state_server_;
-    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr test_server_;
-    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_latest_trajectory_server_;
-    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_latest_joint_space_trajectory_server_;
+    // // servers
+    // rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_state_server_;
+    // rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr test_server_;
+    // rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_latest_trajectory_server_;
+    // rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr print_latest_joint_space_trajectory_server_;
     rclcpp::Service<motion_planning_abstractions_msgs::srv::GenerateTrajectory>::SharedPtr generate_trajectory_server_;
-    
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr execute_trajectory_server_;
     //////// REPLACING THE SERVER WITH A TRIGGER BECAUSE ITS HARD TO TEST WITH JUST COMMAND LINE, need to change this before using it properly
     // rclcpp::Service<motion_planning_abstractions_msgs::srv::ExecuteTrajectory>::SharedPtr execute_trajectory_server_;
-    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr execute_trajectory_server_;
 
     // clients
 
